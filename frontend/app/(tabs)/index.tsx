@@ -1,13 +1,14 @@
 import { useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame } from "lucide-react-native";
+import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 import { fmtDate, severityColor } from "@/src/utils/format";
+import { waMessage } from "@/app/family-alerts";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -68,6 +69,14 @@ const useStyles = makeStyles((c) => ({
     backgroundColor: c.warning + "22",
   },
   streakTxt: { fontSize: 12, color: c.warning, fontWeight: "700" },
+  waAlertBtn: {
+    marginTop: spacing.sm, backgroundColor: "#25D366",
+    paddingHorizontal: spacing.md, paddingVertical: 8,
+    borderRadius: radius.md, flexDirection: "row", alignItems: "center",
+    alignSelf: "flex-start", gap: 6,
+  },
+  waAlertBtnTxt: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
+  alertLink: { marginTop: spacing.sm, color: c.error, fontSize: 13, fontWeight: "600" },
 }));
 
 export default function Dashboard() {
@@ -82,6 +91,7 @@ export default function Dashboard() {
     queryKey: ["summary"],
     queryFn: () => api.summary(),
   });
+  const { data: contact } = useQuery({ queryKey: ["emergency-contact"], queryFn: () => api.getEmergencyContact() });
 
   const onRefresh = useCallback(() => {
     refetch();
@@ -137,6 +147,23 @@ export default function Dashboard() {
             <View style={{ flex: 1 }}>
               <Text style={styles.alertTitle}>{r.label}</Text>
               <Text style={styles.alertMsg}>{r.message}</Text>
+              {contact?.phone ? (
+                <TouchableOpacity
+                  testID={`alert-whatsapp-${i}`}
+                  style={styles.waAlertBtn}
+                  onPress={() => {
+                    const msg = `URGENT: My ZedPulse reading is ${r.label}${"value" in r ? ` — ${r.value} mmol/L` : ""}${"systolic" in r ? ` — ${r.systolic}/${r.diastolic} mmHg` : ""}. ${r.message}`;
+                    Linking.openURL(waMessage(contact.phone!, msg)).catch(() => {});
+                  }}
+                >
+                  <MessageCircle size={14} color="#FFFFFF" />
+                  <Text style={styles.waAlertBtnTxt}>WhatsApp {contact.name || "family"}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity testID={`alert-setup-family-${i}`} onPress={() => router.push("/family-alerts")}>
+                  <Text style={styles.alertLink}>Set up family alerts →</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         ))}
@@ -261,6 +288,34 @@ export default function Dashboard() {
             <Text style={styles.secondaryBtnTxt}>Medications</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.quickRow}>
+          <TouchableOpacity
+            testID="open-food-button"
+            style={styles.secondaryBtn}
+            onPress={() => router.push("/food-scanner")}
+          >
+            <Utensils size={16} color={colors.onSurface} />
+            <Text style={styles.secondaryBtnTxt}>Food scan</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="open-clinics-button"
+            style={styles.secondaryBtn}
+            onPress={() => router.push("/clinics")}
+          >
+            <Hospital size={16} color={colors.onSurface} />
+            <Text style={styles.secondaryBtnTxt}>Clinics</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          testID="open-insights-button"
+          style={[styles.secondaryBtn, { marginTop: 0 }]}
+          onPress={() => router.push("/weekly-insights")}
+        >
+          <TrendingUp size={16} color={colors.onSurface} />
+          <Text style={styles.secondaryBtnTxt}>Weekly insights</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );

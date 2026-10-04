@@ -98,4 +98,24 @@ export const api = {
   shareCurrent: () => request<{ token: string | null; expires_at?: string }>("/share/current"),
   shareCreate: () => request<{ token: string; expires_at: string; url: string | null; path: string }>("/share/create", { method: "POST" }),
   shareRevoke: () => request<any>("/share/revoke", { method: "POST" }),
+
+  // Emergency contact
+  getEmergencyContact: () => request<{ name: string | null; phone: string | null }>("/profile/emergency-contact"),
+  setEmergencyContact: (name: string, phone: string) =>
+    request<any>("/profile/emergency-contact", { method: "POST", body: { name, phone } }),
+  deleteEmergencyContact: () => request<any>("/profile/emergency-contact", { method: "DELETE" }),
+
+  // Food
+  scanFood: (image_base64: string, content_type: string = "image/jpeg") =>
+    request<any>("/food/scan", { method: "POST", body: { image_base64, content_type } }),
+  foodScans: () => request<any[]>("/food/scans"),
+  foodLibrary: () => request<any[]>("/food/library"),
+  logFood: (body: { name: string; carbs_g: number; portion?: string }) =>
+    request<any>("/food/log", { method: "POST", body }),
+
+  // Clinics
+  listClinics: (city?: string) => request<any[]>(`/clinics${city ? `?city=${encodeURIComponent(city)}` : ""}`),
+
+  // Insights
+  weeklyInsights: () => request<any>("/insights/weekly"),
 };

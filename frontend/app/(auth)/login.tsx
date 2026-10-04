@@ -91,7 +91,7 @@ export default function Login() {
         <View style={styles.logoWrap}>
           <HeartPulse color={colors.brand} size={36} />
         </View>
-        <Text style={styles.title}>VitaTrack</Text>
+        <Text style={styles.title}>ZedPulse</Text>
         <Text style={styles.subtitle}>
           {mode === "login" ? "Welcome back. Sign in to continue." : "Create your private health journal."}
         </Text>

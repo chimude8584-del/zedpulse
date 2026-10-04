@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "ZedPulse",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,14 +9,25 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.vitalsmonitor.slpdy0"
+      "bundleIdentifier": "com.emergent.vitalsmonitor.slpdy0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan meals to log carbs",
+        "NSPhotoLibraryUsageDescription": "Pick meal photos to log carbs",
+        "NSLocationWhenInUseUsageDescription": "Find nearby clinics in Zambia"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.emergent.vitalsmonitor.slpdy0"
+      "package": "com.emergent.vitalsmonitor.slpdy0",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -40,7 +51,9 @@
       "expo-web-browser",
       "expo-status-bar",
       "expo-notifications",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-image-picker",
+      "expo-location"
     ],
     "experiments": {
       "typedRoutes": true

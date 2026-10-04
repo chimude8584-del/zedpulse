@@ -1,38 +1,45 @@
-# VitaTrack — Diabetes & Blood Pressure Companion (Zambia)
+# ZedPulse — Diabetes & Blood Pressure Companion (Zambia)
+
+Renamed to ZedPulse. All features now live.
 
 ## What it does
-Private phone-passcode login (+260 default). Users log blood glucose (mmol/L) and blood pressure (mmHg). The app classifies each reading, warns on hypo/hyper or hypertension, trends readings on a chart, gives Zambia-aware AI diet/treatment advice (nshima, kapenta, chibwabwa, rape, etc.) via GPT-5.6 Terra, tracks medication adherence, lets users set daily local reminders, and shares a read-only 7-day doctor link or exports PDFs for clinicians.
+Private phone-passcode login (+260 default). Users log blood glucose (mmol/L) and blood pressure (mmHg). The app classifies each reading, warns on hypo/hyper or hypertension, trends readings on a chart, gives Zambia-aware AI diet/treatment advice via GPT-5.6 Terra, tracks medications, sets daily local reminders, scans meals via camera + AI vision, lists ~40 Zambian clinics with GPS distance, delivers weekly insights, and shares a read-only 7-day doctor link or exports a PDF.
 
 ## Stack
 - Backend: FastAPI + MongoDB (motor), JWT auth, bcrypt-hashed passcodes
-- AI: emergentintegrations (openai/gpt-5.6-terra) with per-user recent-reading context tuned to Zambia
-- Frontend: Expo Router, React Query, lucide icons, react-native-svg charts, expo-notifications, expo-print, expo-sharing, expo-clipboard
+- AI: emergentintegrations (openai/gpt-5.6-terra) + ImageContent for vision (food scanner)
+- Frontend: Expo Router, React Query, lucide icons, react-native-svg, expo-notifications, expo-print, expo-sharing, expo-clipboard, expo-image-picker, expo-location
 - Theme: Sage botanical palette, light + dark
 
-## API surface (all under /api)
+## API surface (/api)
 - POST /auth/signup, /auth/login, GET /auth/me
-- POST/GET/DELETE /readings/glucose
-- POST/GET/DELETE /readings/bp
-- GET /stats/summary (now includes streak_days using Africa/Lusaka day boundary)
-- POST /advice (Zambian food context), GET /advice/history
-- GET /report (text) — frontend PDF export via expo-print
+- POST/GET/DELETE /readings/glucose, /readings/bp
+- GET /stats/summary (streak_days)
+- POST /advice (Zambian context), GET /advice/history
+- GET /report (text report)
 - POST/GET/PATCH/DELETE /reminders
 - POST/GET/DELETE /medications, POST /medications/log, GET /medications/history
-- POST /share/create, GET /share/current, POST /share/revoke
-- Public: GET /api/share/{token} → read-only HTML page (7-day expiry)
+- POST /share/create, GET /share/current, POST /share/revoke, GET /share/{token} (public HTML)
+- GET/POST/DELETE /profile/emergency-contact
+- POST /food/scan (vision), GET /food/scans, GET /food/library (public, 30 items), POST /food/log
+- GET /clinics (public, 40 Zambian clinics), GET /clinics?city=X
+- GET /insights/weekly (stats + Zambian AI tip)
 
 ## Screens
-- /(auth)/login — phone (+260 default) + 4-8 digit passcode
-- /(tabs)/index — dashboard with streak chip, critical alerts, latest glucose + BP cards, quick actions (Log, Share, Reminders, Medications)
-- /(tabs)/log — segmented glucose/BP form with Zambia-friendly helpers
-- /(tabs)/history — SVG line chart with in-range band + reading list
-- /(tabs)/advisor — AI chat with Zambian food guidance
-- /reminders — daily local notifications (schedule via expo-notifications)
-- /medications — track name/dose/times-per-day, log each dose
-- /share-link — create/revoke 7-day read-only doctor link
-- /report — text + PDF export + share
-- /settings — profile, quick links, sign out
+- /(auth)/login — ZedPulse branding, +260 default
+- /(tabs)/index — dashboard with streak chip, critical alerts (+ WhatsApp family button when contact saved), quick-action grid (Log, Share, Reminders, Meds, Food, Clinics, Insights)
+- /(tabs)/log — segmented glucose/BP
+- /(tabs)/history — SVG line chart + list
+- /(tabs)/advisor — AI chat with Zambia-aware prompts
+- /food-scanner — camera + gallery AI scan OR tap-to-log from 30-item Zambian library
+- /clinics — city filter + GPS distance sort + Directions/Call per clinic
+- /weekly-insights — glucose/BP/adherence/in-range tiles + Zambian AI tip
+- /family-alerts — set/update/remove emergency contact; test WhatsApp
+- /reminders, /medications, /share-link, /report, /settings
 
 ## Testing status
-- 31/31 original backend tests pass
-- 22/22 new-feature backend tests pass (reminders, meds, share, streak, Zambia advice)
+- Tests through iteration 3: 80/80 passed (31 original + 22 Zambia features + 27 ZedPulse new, after FileContent→ImageContent fix for vision)
+
+## Expo Go compatibility
+- Camera, gallery, location, local notifications: all work in Expo Go
+- Deep push / background audio: build required

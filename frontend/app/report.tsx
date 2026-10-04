@@ -83,8 +83,8 @@ export default function Report() {
         .sub { color:#6B766F; font-size:12px; margin-bottom:16px; }
         pre { background:#F1EFE8; padding:16px; border-radius:8px; font-size:11px; line-height:1.5; white-space:pre-wrap; }
       </style></head><body>
-      <h1>VitaTrack — Health Report</h1>
-      <div class='sub'>Generated via VitaTrack mobile app</div>
+      <h1>ZedPulse — Health Report</h1>
+      <div class='sub'>Generated via ZedPulse mobile app · Zambia</div>
       <pre>${text.replace(/</g, "&lt;")}</pre>
     </body></html>`;
     try {

@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt as pyjwt
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -491,7 +491,7 @@ async def report(current_user: dict = Depends(get_current_user)):
     ).sort("timestamp", -1).limit(500).to_list(500)
 
     lines = []
-    lines.append("HEALTH REPORT — Diabetes & Blood Pressure")
+    lines.append("ZedPulse HEALTH REPORT — Diabetes & Blood Pressure")
     lines.append(f"Patient: {current_user.get('name') or 'User'}  Phone: {current_user.get('phone')}")
     lines.append(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
@@ -681,7 +681,7 @@ def _render_html(user: dict, glucose: list, bp: list) -> str:
     phone = _html.escape(user.get("phone", ""))
     return f"""<!doctype html><html><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>VitaTrack — {name}</title>
+<title>ZedPulse — {name}</title>
 <style>
   :root {{ color-scheme: light; }}
   * {{ box-sizing: border-box; }}
@@ -700,7 +700,7 @@ def _render_html(user: dict, glucose: list, bp: list) -> str:
   .empty {{ color:#6B766F; text-align:center; padding:16px; }}
   .foot {{ color:#6B766F; font-size:12px; margin-top:24px; text-align:center; }}
 </style></head><body><div class='wrap'>
-<h1>VitaTrack · {name}</h1>
+<h1>ZedPulse · {name}</h1>
 <div class='sub'>{phone} · shared read-only</div>
 <div class='card'><h2>Blood Glucose (mmol/L)</h2>
 <table><tr><th>When</th><th>Value</th><th>Context</th><th>Status</th></tr>{g_rows}</table></div>
@@ -783,6 +783,295 @@ async def share_view(token: str):
     glucose = await db.glucose_readings.find({"user_id": link["user_id"]}, {"_id": 0}).sort("timestamp", -1).limit(100).to_list(100)
     bp = await db.bp_readings.find({"user_id": link["user_id"]}, {"_id": 0}).sort("timestamp", -1).limit(100).to_list(100)
     return HTMLResponse(_render_html(user or {}, glucose, bp))
+
+
+# -------------------- Emergency Family Contact --------------------
+class EmergencyContactIn(BaseModel):
+    name: str
+    phone: str  # include country code, e.g. +260977000000
+
+
+@api_router.get("/profile/emergency-contact")
+async def get_emergency_contact(current_user: dict = Depends(get_current_user)):
+    doc = await db.emergency_contacts.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    return doc or {"name": None, "phone": None}
+
+
+@api_router.post("/profile/emergency-contact")
+async def set_emergency_contact(input: EmergencyContactIn, current_user: dict = Depends(get_current_user)):
+    phone = normalize_phone(input.phone)
+    if len(phone) < 7:
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+    if not input.name.strip():
+        raise HTTPException(status_code=400, detail="Name required")
+    doc = {
+        "user_id": current_user["id"],
+        "name": input.name.strip(),
+        "phone": phone,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.emergency_contacts.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"name": doc["name"], "phone": doc["phone"]}
+
+
+@api_router.delete("/profile/emergency-contact")
+async def delete_emergency_contact(current_user: dict = Depends(get_current_user)):
+    await db.emergency_contacts.delete_one({"user_id": current_user["id"]})
+    return {"ok": True}
+
+
+# -------------------- Food Scanner --------------------
+class FoodScanIn(BaseModel):
+    image_base64: str  # raw base64, no data: prefix
+    content_type: Optional[str] = "image/jpeg"
+
+
+FOOD_SCAN_PROMPT = (
+    "You are a Zambian nutrition assistant for people with diabetes. "
+    "Look at this photo of food and respond with STRICT JSON only, no commentary: "
+    '{"foods":[{"name":"...","portion":"...","carbs_g":0}],"total_carbs_g":0,'
+    '"glycemic_load":"low|medium|high","diabetes_tips":"short tip (<=240 chars)",'
+    '"zambia_note":"short tip tailored to local foods/alternatives (<=200 chars)"}. '
+    "Use Zambian food names when possible (nshima, kapenta, ifisashi, chibwabwa, rape, impwa, "
+    "shima ya mabele). Portion sizes should be realistic (e.g. 'palm-sized ball', '1 cup'). "
+    "Carbs are grams per the visible portion. If no food is visible, return foods=[] and total_carbs_g=0."
+)
+
+
+@api_router.post("/food/scan")
+async def food_scan(input: FoodScanIn, current_user: dict = Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="LLM key not configured")
+    if not input.image_base64 or len(input.image_base64) < 100:
+        raise HTTPException(status_code=400, detail="Image data missing")
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"food-{current_user['id']}-{uuid.uuid4().hex[:8]}",
+        system_message=FOOD_SCAN_PROMPT,
+    ).with_model("openai", "gpt-5.6-terra")
+    msg = UserMessage(
+        text="Analyze this meal.",
+        file_contents=[ImageContent(image_base64=input.image_base64)],
+    )
+    try:
+        reply = await chat.send_message(msg)
+    except Exception as e:
+        logger.exception("Food scan LLM error")
+        raise HTTPException(status_code=502, detail=f"Vision service error: {e}")
+    # Extract JSON from reply (sometimes LLM wraps in markdown)
+    import json as _json, re as _re
+    cleaned = reply.strip()
+    m = _re.search(r"\{[\s\S]*\}", cleaned)
+    parsed = None
+    if m:
+        try:
+            parsed = _json.loads(m.group(0))
+        except Exception:
+            parsed = None
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "foods": (parsed or {}).get("foods", []),
+        "total_carbs_g": (parsed or {}).get("total_carbs_g"),
+        "glycemic_load": (parsed or {}).get("glycemic_load"),
+        "diabetes_tips": (parsed or {}).get("diabetes_tips", ""),
+        "zambia_note": (parsed or {}).get("zambia_note", ""),
+        "raw": reply if not parsed else None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.food_scans.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/food/scans")
+async def food_scans(current_user: dict = Depends(get_current_user), limit: int = 20):
+    items = await db.food_scans.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return items
+
+
+# Zambian foods library (manual pick fallback)
+ZAMBIAN_FOODS = [
+    {"name": "Nshima (mealie-meal)", "portion": "1 fist", "carbs_g": 40, "gi": "high", "tip": "Prefer wholegrain mealie-meal; pair with vegetables"},
+    {"name": "Nshima (wholegrain)", "portion": "1 fist", "carbs_g": 35, "gi": "medium", "tip": "Better choice than refined mealie-meal"},
+    {"name": "Shima ya mabele (sorghum)", "portion": "1 fist", "carbs_g": 30, "gi": "low", "tip": "Good diabetic choice"},
+    {"name": "Rice (white)", "portion": "1 cup", "carbs_g": 45, "gi": "high", "tip": "Half-portion with lots of veg"},
+    {"name": "Brown rice", "portion": "1 cup", "carbs_g": 40, "gi": "medium", "tip": "Better than white rice"},
+    {"name": "Sweet potato (chimbwali)", "portion": "1 medium", "carbs_g": 25, "gi": "medium", "tip": "Better than nshima for blood sugar"},
+    {"name": "Cassava (chinaka)", "portion": "1 cup", "carbs_g": 40, "gi": "medium", "tip": "Watch portion size"},
+    {"name": "Beans (small portion)", "portion": "1/2 cup", "carbs_g": 20, "gi": "low", "tip": "Great protein + fibre"},
+    {"name": "Kapenta (dried fish)", "portion": "small plate", "carbs_g": 2, "gi": "low", "tip": "Rinse to reduce salt if hypertensive"},
+    {"name": "Bream (fresh)", "portion": "1 fillet", "carbs_g": 0, "gi": "low", "tip": "Excellent lean protein"},
+    {"name": "Chicken (grilled)", "portion": "1 breast", "carbs_g": 0, "gi": "low", "tip": "Avoid deep-fried"},
+    {"name": "Beef stew", "portion": "1 cup", "carbs_g": 8, "gi": "low", "tip": "Watch added oil"},
+    {"name": "Eggs (boiled)", "portion": "2 eggs", "carbs_g": 1, "gi": "low", "tip": "Great breakfast"},
+    {"name": "Chibwabwa (pumpkin leaves)", "portion": "1 cup", "carbs_g": 5, "gi": "low", "tip": "Eat freely"},
+    {"name": "Rape (greens)", "portion": "1 cup", "carbs_g": 4, "gi": "low", "tip": "Eat freely"},
+    {"name": "Cabbage", "portion": "1 cup", "carbs_g": 5, "gi": "low", "tip": "Eat freely"},
+    {"name": "Impwa (local eggplant)", "portion": "1 cup", "carbs_g": 6, "gi": "low", "tip": "Great side dish"},
+    {"name": "Okra (delele)", "portion": "1 cup", "carbs_g": 7, "gi": "low", "tip": "Helps slow glucose rise"},
+    {"name": "Tomato & onion relish", "portion": "1/2 cup", "carbs_g": 6, "gi": "low", "tip": "Good base for stews"},
+    {"name": "Avocado", "portion": "1/2 fruit", "carbs_g": 6, "gi": "low", "tip": "Healthy fats"},
+    {"name": "Groundnuts (unsalted)", "portion": "small handful", "carbs_g": 6, "gi": "low", "tip": "Portion-controlled snack"},
+    {"name": "Ifisashi (greens in peanut)", "portion": "1 cup", "carbs_g": 10, "gi": "low", "tip": "Watch portion of peanut sauce"},
+    {"name": "Mango", "portion": "1 medium", "carbs_g": 25, "gi": "medium", "tip": "Half fruit if sugar is high"},
+    {"name": "Guava", "portion": "1 medium", "carbs_g": 10, "gi": "low", "tip": "Good fruit choice"},
+    {"name": "Papaya (pawpaw)", "portion": "1 cup", "carbs_g": 15, "gi": "medium", "tip": "Enjoy in moderation"},
+    {"name": "Orange", "portion": "1 medium", "carbs_g": 15, "gi": "low", "tip": "Better than juice"},
+    {"name": "Banana (ripe)", "portion": "1 medium", "carbs_g": 27, "gi": "medium", "tip": "Prefer less ripe"},
+    {"name": "Maheu (fermented drink)", "portion": "1 cup", "carbs_g": 25, "gi": "high", "tip": "High sugar — limit"},
+    {"name": "Munkoyo", "portion": "1 cup", "carbs_g": 20, "gi": "medium", "tip": "Limit sweetened versions"},
+    {"name": "Fritters (vitumbuwa)", "portion": "1 piece", "carbs_g": 15, "gi": "high", "tip": "Occasional treat"},
+]
+
+
+@api_router.get("/food/library")
+async def food_library():
+    return ZAMBIAN_FOODS
+
+
+class FoodLogIn(BaseModel):
+    name: str
+    carbs_g: float
+    portion: Optional[str] = ""
+
+
+@api_router.post("/food/log")
+async def food_log(input: FoodLogIn, current_user: dict = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "name": input.name,
+        "portion": input.portion or "",
+        "carbs_g": float(input.carbs_g),
+        "logged_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.food_logs.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# -------------------- Clinic Finder --------------------
+ZAMBIAN_CLINICS = [
+    # Lusaka
+    {"name": "University Teaching Hospital (UTH)", "city": "Lusaka", "type": "Hospital", "lat": -15.4197, "lng": 28.3240, "phone": "+260211256067"},
+    {"name": "Levy Mwanawasa University Teaching Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.3875, "lng": 28.3610, "phone": "+260211845000"},
+    {"name": "Chainama Hills Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.4080, "lng": 28.3858, "phone": "+260211292020"},
+    {"name": "Kabwata Clinic", "city": "Lusaka", "type": "Clinic", "lat": -15.4330, "lng": 28.2928, "phone": "+260211256067"},
+    {"name": "Matero Reference Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.3785, "lng": 28.2612, "phone": "+260211242200"},
+    {"name": "Kanyama First-Level Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.4310, "lng": 28.2347, "phone": "+260211279181"},
+    {"name": "Chawama First-Level Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.4624, "lng": 28.2787, "phone": "+260211274124"},
+    {"name": "Chilenje First-Level Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.4592, "lng": 28.3187, "phone": "+260211261108"},
+    {"name": "Chelstone Clinic", "city": "Lusaka", "type": "Clinic", "lat": -15.3922, "lng": 28.3620, "phone": "+260211292020"},
+    {"name": "Kalingalinga Clinic", "city": "Lusaka", "type": "Clinic", "lat": -15.3932, "lng": 28.3450, "phone": "+260211292020"},
+    # Copperbelt
+    {"name": "Ndola Teaching Hospital", "city": "Ndola", "type": "Hospital", "lat": -12.9587, "lng": 28.6366, "phone": "+260212611111"},
+    {"name": "Kitwe Teaching Hospital", "city": "Kitwe", "type": "Hospital", "lat": -12.8117, "lng": 28.2064, "phone": "+260212222661"},
+    {"name": "Arthur Davison Children's Hospital", "city": "Ndola", "type": "Hospital", "lat": -12.9668, "lng": 28.6349, "phone": "+260212615015"},
+    {"name": "Chingola Central Hospital", "city": "Chingola", "type": "Hospital", "lat": -12.5290, "lng": 27.8564, "phone": "+260212311254"},
+    {"name": "Mufulira General Hospital", "city": "Mufulira", "type": "Hospital", "lat": -12.5500, "lng": 28.2400, "phone": "+260212411254"},
+    {"name": "Luanshya Mine Hospital", "city": "Luanshya", "type": "Hospital", "lat": -13.1370, "lng": 28.4160, "phone": "+260212511254"},
+    {"name": "Kalulushi General Hospital", "city": "Kalulushi", "type": "Hospital", "lat": -12.8370, "lng": 28.1030, "phone": "+260212710254"},
+    # Southern
+    {"name": "Livingstone Central Hospital", "city": "Livingstone", "type": "Hospital", "lat": -17.8465, "lng": 25.8542, "phone": "+260213320221"},
+    {"name": "Choma General Hospital", "city": "Choma", "type": "Hospital", "lat": -16.8097, "lng": 26.9875, "phone": "+260213220254"},
+    {"name": "Mazabuka General Hospital", "city": "Mazabuka", "type": "Hospital", "lat": -15.8552, "lng": 27.7472, "phone": "+260213230254"},
+    {"name": "Monze Mission Hospital", "city": "Monze", "type": "Hospital", "lat": -16.2808, "lng": 27.4793, "phone": "+260213250254"},
+    # Central / Eastern / Western
+    {"name": "Kabwe General Hospital", "city": "Kabwe", "type": "Hospital", "lat": -14.4469, "lng": 28.4464, "phone": "+260215221254"},
+    {"name": "Kapiri Mposhi Hospital", "city": "Kapiri Mposhi", "type": "Hospital", "lat": -13.9700, "lng": 28.6700, "phone": "+260215271254"},
+    {"name": "Mongu General Hospital", "city": "Mongu", "type": "Hospital", "lat": -15.2487, "lng": 23.1226, "phone": "+260217221254"},
+    {"name": "Chipata Central Hospital", "city": "Chipata", "type": "Hospital", "lat": -13.6333, "lng": 32.6500, "phone": "+260216221254"},
+    {"name": "Petauke District Hospital", "city": "Petauke", "type": "Hospital", "lat": -14.2496, "lng": 31.3156, "phone": "+260216371254"},
+    {"name": "Solwezi General Hospital", "city": "Solwezi", "type": "Hospital", "lat": -12.1683, "lng": 26.3889, "phone": "+260218821254"},
+    {"name": "Kasama General Hospital", "city": "Kasama", "type": "Hospital", "lat": -10.2129, "lng": 31.1808, "phone": "+260214221254"},
+    {"name": "Mansa General Hospital", "city": "Mansa", "type": "Hospital", "lat": -11.1996, "lng": 28.8940, "phone": "+260212821254"},
+    {"name": "Chinsali General Hospital", "city": "Chinsali", "type": "Hospital", "lat": -10.5500, "lng": 32.0600, "phone": "+260214471254"},
+    # Private
+    {"name": "Fairview Hospital", "city": "Lusaka", "type": "Private", "lat": -15.4040, "lng": 28.3028, "phone": "+260211256071"},
+    {"name": "Lusaka Trust Hospital", "city": "Lusaka", "type": "Private", "lat": -15.4098, "lng": 28.3045, "phone": "+260211257373"},
+    {"name": "Victoria Hospital", "city": "Lusaka", "type": "Private", "lat": -15.3998, "lng": 28.3250, "phone": "+260211256071"},
+    {"name": "CFB Medical Centre", "city": "Lusaka", "type": "Private", "lat": -15.4150, "lng": 28.3100, "phone": "+260211256071"},
+    {"name": "Hilltop Hospital", "city": "Ndola", "type": "Private", "lat": -12.9640, "lng": 28.6450, "phone": "+260212612345"},
+    # Diabetes-focused centres
+    {"name": "Zambia Diabetes Association HQ", "city": "Lusaka", "type": "Diabetes Centre", "lat": -15.4190, "lng": 28.3215, "phone": "+260211256067"},
+    {"name": "DCA Diabetes Clinic (UTH)", "city": "Lusaka", "type": "Diabetes Centre", "lat": -15.4197, "lng": 28.3240, "phone": "+260211256067"},
+    {"name": "Beit Cure Hospital", "city": "Lusaka", "type": "Hospital", "lat": -15.4038, "lng": 28.3160, "phone": "+260211256067"},
+    {"name": "CIDRZ Centre", "city": "Lusaka", "type": "Clinic", "lat": -15.4030, "lng": 28.3135, "phone": "+260211257670"},
+    {"name": "Kitwe Hilltop Clinic", "city": "Kitwe", "type": "Clinic", "lat": -12.8020, "lng": 28.2120, "phone": "+260212222661"},
+]
+
+
+@api_router.get("/clinics")
+async def list_clinics(city: Optional[str] = None):
+    items = ZAMBIAN_CLINICS
+    if city:
+        items = [c for c in items if c["city"].lower() == city.lower()]
+    return items
+
+
+# -------------------- Weekly Insights --------------------
+@api_router.get("/insights/weekly")
+async def weekly_insights(current_user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc)
+    one_week_ago = now - timedelta(days=7)
+    glucose = await db.glucose_readings.find(
+        {"user_id": current_user["id"], "timestamp": {"$gte": one_week_ago.isoformat()}},
+        {"_id": 0},
+    ).sort("timestamp", -1).to_list(500)
+    bp = await db.bp_readings.find(
+        {"user_id": current_user["id"], "timestamp": {"$gte": one_week_ago.isoformat()}},
+        {"_id": 0},
+    ).sort("timestamp", -1).to_list(500)
+    med_logs = await db.med_logs.find(
+        {"user_id": current_user["id"], "taken_at": {"$gte": one_week_ago.isoformat()}},
+        {"_id": 0},
+    ).to_list(500)
+    meds = await db.medications.find(
+        {"user_id": current_user["id"], "deleted_at": {"$exists": False}},
+        {"_id": 0},
+    ).to_list(100)
+
+    g_vals = [g["value"] for g in glucose]
+    g_avg = round(sum(g_vals) / len(g_vals), 1) if g_vals else None
+    g_in_range = sum(1 for g in glucose if g.get("status") == "in_range")
+    g_in_range_pct = round((g_in_range / len(glucose)) * 100) if glucose else None
+    sys_avg = round(sum(b["systolic"] for b in bp) / len(bp)) if bp else None
+    dia_avg = round(sum(b["diastolic"] for b in bp) / len(bp)) if bp else None
+    expected_doses = sum(m["times_per_day"] for m in meds) * 7
+    adherence_pct = round((len(med_logs) / expected_doses) * 100) if expected_doses else None
+
+    # Zambia tip via LLM (short, graceful if unavailable)
+    tip = ""
+    if EMERGENT_LLM_KEY and (glucose or bp):
+        try:
+            summary_txt = (
+                f"glucose readings={len(glucose)} avg={g_avg} in_range_pct={g_in_range_pct}; "
+                f"bp readings={len(bp)} avg={sys_avg}/{dia_avg}; "
+                f"medication adherence={adherence_pct}%"
+            )
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=f"weekly-{current_user['id']}-{now.strftime('%Y%W')}",
+                system_message="You are a Zambian diabetes/BP coach. Reply in 2 short sentences (max 200 chars total). Reference one Zambian food or habit (nshima portion, kapenta salt, chibwabwa, walking in the compound, hydration). No disclaimers.",
+            ).with_model("openai", "gpt-5.6-terra")
+            tip = (await chat.send_message(UserMessage(text=f"Weekly data: {summary_txt}. Give one encouraging tip."))).strip()
+        except Exception as e:
+            logger.warning(f"weekly tip LLM error: {e}")
+            tip = ""
+
+    return {
+        "week_start": one_week_ago.isoformat(),
+        "week_end": now.isoformat(),
+        "glucose": {"count": len(glucose), "avg_mmol_l": g_avg, "in_range_pct": g_in_range_pct},
+        "bp": {"count": len(bp), "avg_systolic": sys_avg, "avg_diastolic": dia_avg},
+        "medications": {"logged": len(med_logs), "expected": expected_doses, "adherence_pct": adherence_pct},
+        "tip": tip,
+    }
 
 
 # -------------------- Mount + CORS --------------------

@@ -1,0 +1,57 @@
+{
+  "summary": "Backend-only testing of ZedPulse newly-added endpoints: emergency contact, food scanner (library/log/scans/scan), clinic finder (~40 clinics with city filter), and weekly insights. Built /app/backend/tests/test_08_zedpulse.py with 27 tests. 26/27 PASSED. 1 FAILED: POST /api/food/scan returns 502 for a valid JPEG — the backend wraps the image in FileContent(content_type='image/jpeg') but emergentintegrations/litellm's OpenAI route for gpt-5.6-terra sends it through the file-upload path which expects application/pdf, so the vision call never succeeds. Fix: use emergentintegrations.llm.chat.ImageContent instead of FileContent. All other endpoints (emergency contact GET/POST/DELETE with validation + upsert, food library 30 items, food log, food scan input validation, 40 clinics with Lusaka=18 and Ndola=3 subsets, weekly insights shape with and without seeded readings) behave exactly as specified. Auth enforcement verified: all new endpoints 401 without token except public /food/library and /clinics.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/food/scan",
+        "issue": "Vision call always fails with 502. Backend uses FileContent(content_type='image/jpeg', file_content_base64=...) at server.py:858; emergentintegrations/litellm routes this through OpenAI's files/PDF API and rejects image/jpeg: `Invalid file data: ... Expected a base64-encoded data URL with an application/pdf MIME type ... but got unsupported MIME type 'image/jpeg'`. Fix: `from emergentintegrations.llm.chat import ImageContent` and pass `file_contents=[ImageContent(image_base64=input.image_base64)]`. The whole Food Scanner feature is broken end-to-end until this is fixed.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/profile/emergency-contact",
+        "issue": "Phone validation uses `len(normalize_phone(phone)) < 7` which only checks digit count. A string like '+2601234' (7 digits) is accepted even though it is not a valid Zambian MSISDN. If stricter Zambian validation is desired (expected +260 followed by 9 digits), add a regex check. Current behaviour matches the spec's '>=7' rule, so not a blocker."
+      },
+      {
+        "endpoint": "GET /api/insights/weekly",
+        "issue": "`tip` is empty string when there are no readings (expected). When readings exist, the LLM call is best-effort — if it fails, `tip` is '' and the endpoint still returns 200. This matches the spec ('may be empty if no readings') but note that network/LLM errors are also silently swallowed to tip=''."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_08_zedpulse.py",
+    "/app/test_reports/pytest/pytest_zedpulse.xml"
+  ],
+  "action_items": [
+    "URGENT: Replace FileContent with ImageContent in POST /api/food/scan (server.py line ~858). Example:\n    from emergentintegrations.llm.chat import ImageContent\n    msg = UserMessage(text='Analyze this meal.', file_contents=[ImageContent(image_base64=input.image_base64)])\nAfter the fix, re-run tests/test_08_zedpulse.py::TestFoodScans::test_scan_accepts_tiny_jpeg.",
+    "server.py is now 1089 lines — well past the 700-line soft limit; split into routers/ (profile, food, clinics, insights, …) in the next cleanup.",
+    "Consider HTML-escaping user data in /api/share/{token} HTML (noted in iteration_2 as well, still outstanding).",
+    "Optional: tighten emergency phone validation to Zambian pattern (`+?260[7-9]\\d{8}`) if that is a product requirement."
+  ],
+  "critical_code_review_comments": [
+    "Food Scanner integration path uses the wrong emergentintegrations class — ImageContent is the dedicated subclass for vision input; FileContent is for PDF uploads. The library docstring makes this clear.",
+    "The 502 is actually a 500 from the backend being surfaced by the ingress; the backend logs raise HTTPException(502, ...) inside food_scan after catching the LLM exception. Users will see a confusing Cloudflare page instead of the JSON error.",
+    "`import json as _json, re as _re` inside the endpoint body (server.py:866) — move to module top for consistency.",
+    "ZAMBIAN_FOODS and ZAMBIAN_CLINICS are large module-level constants (~70 LOC each); move to a data/ json file or a separate module to shrink server.py.",
+    "`weekly_insights` embeds a 7-day LLM call on the hot path; if the model is slow this blocks the request. Consider caching the tip per (user_id, iso-week) in Mongo so repeat calls in the same week are instant."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_08_zedpulse.py (new, 27 tests)"
+  ],
+  "success_rate": {
+    "backend": "96% (26/27 new tests passing). The single failure is the Food Scanner vision integration bug.",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "Session-scoped fresh user via /api/auth/signup (conftest.py). Each test creates its own emergency contact / food log / glucose+bp readings scoped to that user, then cleans up where needed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `cd /app/backend && python -m pytest tests/test_08_zedpulse.py -v --tb=short --junitxml=/app/test_reports/pytest/pytest_zedpulse.xml`. 26 pass in ~6s with xdist. Only failing test is TestFoodScans::test_scan_accepts_tiny_jpeg — this will go green once /app/backend/server.py line ~858 switches from FileContent to ImageContent (see action_items). Previous 53 tests (iterations 1 & 2) were NOT re-run per request; this iteration only covers the 4 new ZedPulse feature groups.",
+  "rca_of_issue": "RCA for POST /api/food/scan 502:\n  Trigger: Any client posts a valid base64 JPEG to /api/food/scan with Authorization bearer token.\n  Server logs (backend.err.log):\n    litellm.exceptions.BadRequestError: OpenAIException - Invalid file data: 'messages[2].content[0].file.file_data'. Expected a base64-encoded data URL with an application/pdf MIME type ... but got unsupported MIME type 'image/jpeg'. Received Model Group=gpt-5.6-terra\n  Root cause: server.py imports `FileContent` and constructs `FileContent(content_type='image/jpeg', file_content_base64=input.image_base64)`. The emergentintegrations.llm.chat module serialises FileContent through OpenAI's `file` content-part (intended for PDFs), not through the vision `image_url` content-part. The library ships a dedicated subclass `ImageContent(image_base64=...)` which routes correctly to the vision API.\n  Reproduction:\n    1. POST /api/auth/signup to get a token.\n    2. POST /api/food/scan with any base64 JPEG >100 bytes and Authorization header.\n    3. Observe 502 (backend raises HTTPException(502) after catching ChatError).\n  Mitigation / fix:\n    1. Edit /app/backend/server.py near line 11 imports: `from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent` (remove or keep FileContent as needed).\n    2. In food_scan() (line ~856), replace `FileContent(content_type=..., file_content_base64=input.image_base64)` with `ImageContent(image_base64=input.image_base64)`.\n    3. `sudo supervisorctl restart backend` then rerun the failing test — it should return 200 with the documented JSON contract (even for non-food images, foods=[] is acceptable per spec)."
+}
