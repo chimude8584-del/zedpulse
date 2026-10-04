@@ -1,31 +1,38 @@
-# VitaTrack — Diabetes & Blood Pressure Companion
+# VitaTrack — Diabetes & Blood Pressure Companion (Zambia)
 
 ## What it does
-Private phone-passcode login. Users log blood glucose (mmol/L) and blood pressure (mmHg). The app classifies each reading, warns on hypo/hyper or hypertension, trends readings on a chart, gives AI-personalized diet/treatment advice (GPT-5.6 Terra via Emergent LLM key), and exports a shareable text report for clinicians.
+Private phone-passcode login (+260 default). Users log blood glucose (mmol/L) and blood pressure (mmHg). The app classifies each reading, warns on hypo/hyper or hypertension, trends readings on a chart, gives Zambia-aware AI diet/treatment advice (nshima, kapenta, chibwabwa, rape, etc.) via GPT-5.6 Terra, tracks medication adherence, lets users set daily local reminders, and shares a read-only 7-day doctor link or exports PDFs for clinicians.
 
 ## Stack
 - Backend: FastAPI + MongoDB (motor), JWT auth, bcrypt-hashed passcodes
-- AI: emergentintegrations (openai/gpt-5.6-terra) with per-user recent-reading context
-- Frontend: Expo Router, React Query, lucide icons, react-native-svg for charts
+- AI: emergentintegrations (openai/gpt-5.6-terra) with per-user recent-reading context tuned to Zambia
+- Frontend: Expo Router, React Query, lucide icons, react-native-svg charts, expo-notifications, expo-print, expo-sharing, expo-clipboard
 - Theme: Sage botanical palette, light + dark
 
 ## API surface (all under /api)
 - POST /auth/signup, /auth/login, GET /auth/me
 - POST/GET/DELETE /readings/glucose
 - POST/GET/DELETE /readings/bp
-- GET /stats/summary
-- POST /advice, GET /advice/history
-- GET /report  (text report for Share/Copy)
+- GET /stats/summary (now includes streak_days using Africa/Lusaka day boundary)
+- POST /advice (Zambian food context), GET /advice/history
+- GET /report (text) — frontend PDF export via expo-print
+- POST/GET/PATCH/DELETE /reminders
+- POST/GET/DELETE /medications, POST /medications/log, GET /medications/history
+- POST /share/create, GET /share/current, POST /share/revoke
+- Public: GET /api/share/{token} → read-only HTML page (7-day expiry)
 
 ## Screens
-- /(auth)/login — phone + 4-8 digit passcode, toggles to signup
-- /(tabs)/index — dashboard: critical alerts, latest glucose + BP cards with status chips, 30-day avg, in-range %, quick-log/share buttons
-- /(tabs)/log — segmented glucose/BP form, context chips, in-range helper, server classification result card
-- /(tabs)/history — segmented tabs with SVG line chart (shaded in-range band) + reading list with per-row severity dot + delete
-- /(tabs)/advisor — AI chat, quick-action chips (diet/glucose/BP/treatment), disclaimer banner
-- /report — shareable/copyable monospaced report
-- /settings — profile, report shortcut, sign out
+- /(auth)/login — phone (+260 default) + 4-8 digit passcode
+- /(tabs)/index — dashboard with streak chip, critical alerts, latest glucose + BP cards, quick actions (Log, Share, Reminders, Medications)
+- /(tabs)/log — segmented glucose/BP form with Zambia-friendly helpers
+- /(tabs)/history — SVG line chart with in-range band + reading list
+- /(tabs)/advisor — AI chat with Zambian food guidance
+- /reminders — daily local notifications (schedule via expo-notifications)
+- /medications — track name/dose/times-per-day, log each dose
+- /share-link — create/revoke 7-day read-only doctor link
+- /report — text + PDF export + share
+- /settings — profile, quick links, sign out
 
-## Thresholds
-- Glucose: <3.0 severe hypo; <3.9 hypo; context-sensitive upper (fasting 7.0, after-meal 10.0, bedtime 8.3); 10.0-13.9 high; <20.0 very high; >=20.0 critical
-- BP: <90/60 low; <120/80 normal; 120-129 elevated; 130-139/80-89 stage 1; >=140/>=90 stage 2; >=180/>=120 crisis
+## Testing status
+- 31/31 original backend tests pass
+- 22/22 new-feature backend tests pass (reminders, meds, share, streak, Zambia advice)

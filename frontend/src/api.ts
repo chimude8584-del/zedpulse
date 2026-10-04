@@ -4,6 +4,8 @@ import { storage } from "@/src/utils/storage";
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
 const TOKEN_KEY = "glucobp.auth.token";
 
+export const PUBLIC_BASE = BASE;
+
 export async function getToken(): Promise<string | null> {
   return storage.secureGet<string>(TOKEN_KEY, "");
 }
@@ -75,4 +77,25 @@ export const api = {
 
   // Report
   report: () => request<{ text: string; generated_at: string }>("/report"),
+
+  // Reminders
+  listReminders: () => request<any[]>("/reminders"),
+  addReminder: (body: { label: string; time: string; kind?: string; enabled?: boolean }) =>
+    request<any>("/reminders", { method: "POST", body }),
+  toggleReminder: (id: string, enabled: boolean) =>
+    request<any>(`/reminders/${id}?enabled=${enabled}`, { method: "PATCH" }),
+  deleteReminder: (id: string) => request<any>(`/reminders/${id}`, { method: "DELETE" }),
+
+  // Medications
+  listMedications: () => request<any[]>("/medications"),
+  addMedication: (body: { name: string; dose: string; times_per_day: number; note?: string }) =>
+    request<any>("/medications", { method: "POST", body }),
+  deleteMedication: (id: string) => request<any>(`/medications/${id}`, { method: "DELETE" }),
+  logMedication: (medication_id: string) =>
+    request<any>("/medications/log", { method: "POST", body: { medication_id } }),
+
+  // Share
+  shareCurrent: () => request<{ token: string | null; expires_at?: string }>("/share/current"),
+  shareCreate: () => request<{ token: string; expires_at: string; url: string | null; path: string }>("/share/create", { method: "POST" }),
+  shareRevoke: () => request<any>("/share/revoke", { method: "POST" }),
 };

@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only testing of newly-added endpoints (reminders, medications, doctor share link, stats streak_days, Zambian AI diet advice, auth enforcement). Built /app/backend/tests/test_07_new_features.py with 22 tests. ALL 22 PASSED on https://vitals-monitor-105.preview.emergentagent.com. Reminders CRUD/toggle/validation OK (empty label 400, 25:00 400, non-colon 400). Medications CRUD/log/history/soft-delete/taken_today counting OK (empty name 400, times_per_day 0 400, 11 400). Share link: create returns token+expires_at (~7d)+path+url, revokes previous link, /share/current returns active token or null, /share/revoke clears it, public /api/share/{token} serves HTML with no auth and 404 on invalid/revoked. /stats/summary now returns streak_days as a non-negative int and increments after a new reading today. /advice {kind:'diet'} returned substantive Zambian-contextual content (passed soft check with no warning printed). Auth 401 enforcement verified on all new /reminders, /medications, /share endpoints; public /api/share/{token} does NOT require auth. One minor validation gap noted (see minor issues).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/reminders", "issue": "Time format '7:30' (single-digit hour, no leading zero) is ACCEPTED by the server because the implementation only int-parses the two colon-split parts and range-checks them (0..23 / 0..59). Spec said this should return 400. Fix: enforce strict HH:MM via regex ^[0-2]\\d:[0-5]\\d$ before int parsing. Reference: /app/backend/server.py:542-547"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_07_new_features.py",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "Tighten reminder time validation to require strict HH:MM (regex) so '7:30' is rejected per the spec; current server accepts it and normalizes implicitly.",
+    "Consider documenting that `PATCH /api/reminders/{id}` accepts `enabled` as a QUERY param (not JSON body); frontend callers must send `?enabled=true/false`.",
+    "Consider adding tz-aware library (e.g. zoneinfo 'Africa/Lusaka') instead of hardcoded `+ timedelta(hours=2)` for the Lusaka day boundary used in medications/log and stats streak_days — currently fine (Zambia has no DST) but fragile if timezone data ever changes."
+  ],
+  "critical_code_review_comments": [
+    "server.py now ~800 lines — approaching the 700-line soft limit; recommend splitting into routers/ (auth, readings, advice, reminders, medications, share, report).",
+    "`PATCH /reminders/{id}` takes `enabled: bool` as a plain positional-looking parameter; FastAPI treats it as a required query param. Prefer a Pydantic body model `{enabled: bool}` for clarity and future extensibility.",
+    "`from fastapi.responses import HTMLResponse` is imported mid-file (line 767) rather than at the top — functionally OK but inconsistent style.",
+    "Share token is `uuid.uuid4().hex` (128-bit entropy, 32 hex chars) — good. Expiry is enforced in both `/share/current` and `/share/{token}` — good.",
+    "Soft-delete on medications uses `deleted_at` field with `$exists: false` filter — correct. But med_logs for a soft-deleted medication are NOT cascaded or filtered; history still returns them (verified in test). Decide whether that's intended for audit.",
+    "No index hints (e.g., Mongo index on `user_id`, `token`, `day_lsk`) — add indices if the collection grows.",
+    "`_render_html` concatenates user data without HTML-escaping (user name/phone directly inlined). Low risk because name/phone are user-controlled self-data, but add `html.escape()` for safety against stored XSS when a doctor opens the link in a browser."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_07_new_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (22/22 new tests); previous 31 tests not re-run per request", "frontend": "not tested"},
+  "seed_data_creation": "Session-scoped fresh user via /api/auth/signup (phone prefix +1999..., name TEST_PytestUser) from conftest.py. Each test creates its own reminders/meds/share-links scoped to that user. Soft-deleted meds and revoked share links remain in DB (by design).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: `cd /app/backend && python -m pytest tests/test_07_new_features.py -v --tb=short --junitxml=/app/test_reports/pytest/pytest_new_features.xml`. All 22 pass in ~9s (xdist 2 workers). The reminder time validation gap (`'7:30'` accepted) is the only minor functional deviation. The Zambian diet advice test is a SOFT check — asserts answer length and punctuation; prints a warning if no Zambian keywords found. On this run the LLM reply included Zambian context (no warning). Backend URL: https://vitals-monitor-105.preview.emergentagent.com.",
+  "rca_of_issue": "N/A — all new endpoints behave as expected. Only observation: `POST /api/reminders` time validator at /app/backend/server.py:542-547 splits on ':' and int-parses each half, so '7:30' passes (hours=7, minutes=30). To enforce HH:MM strictly, add `if len(hh) != 2 or len(mm) != 2: raise HTTPException(400, 'Time must be HH:MM')` or use `re.fullmatch(r'[0-2]\\d:[0-5]\\d', input.time)`."
+}

@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LogOut, FileText, HeartPulse } from "lucide-react-native";
+import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2 } from "lucide-react-native";
 
 import { api, clearToken } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -74,6 +74,21 @@ export default function Settings() {
           <Text style={styles.phone}>{user?.phone}</Text>
         </View>
 
+        <TouchableOpacity testID="settings-reminders" style={styles.item} onPress={() => router.push("/reminders")}>
+          <Bell size={18} color={colors.brand} />
+          <Text style={styles.itemTxt}>Reminders</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="settings-medications" style={styles.item} onPress={() => router.push("/medications")}>
+          <Pill size={18} color={colors.brand} />
+          <Text style={styles.itemTxt}>Medications</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="settings-share" style={styles.item} onPress={() => router.push("/share-link")}>
+          <Link2 size={18} color={colors.brand} />
+          <Text style={styles.itemTxt}>Doctor share link</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity testID="settings-report" style={styles.item} onPress={() => router.push("/report")}>
           <FileText size={18} color={colors.brand} />
           <Text style={styles.itemTxt}>Export doctor report</Text>
@@ -81,7 +96,7 @@ export default function Settings() {
 
         <View style={styles.item}>
           <HeartPulse size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Units: mmol/L · mmHg</Text>
+          <Text style={styles.itemTxt}>Units: mmol/L · mmHg · Zambia</Text>
         </View>
 
         <TouchableOpacity testID="settings-logout" style={styles.logout} onPress={logout}>

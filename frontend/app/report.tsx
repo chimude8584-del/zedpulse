@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Share, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Share2, Copy } from "lucide-react-native";
+import { ArrowLeft, Share2, Copy, FileDown } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -73,6 +75,29 @@ export default function Report() {
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
+  async function exportPDF() {
+    const html = `<!doctype html><html><head><meta charset='utf-8'>
+      <style>
+        body { font-family: -apple-system, Helvetica, Arial, sans-serif; padding: 32px; color:#1C2420; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .sub { color:#6B766F; font-size:12px; margin-bottom:16px; }
+        pre { background:#F1EFE8; padding:16px; border-radius:8px; font-size:11px; line-height:1.5; white-space:pre-wrap; }
+      </style></head><body>
+      <h1>VitaTrack — Health Report</h1>
+      <div class='sub'>Generated via VitaTrack mobile app</div>
+      <pre>${text.replace(/</g, "&lt;")}</pre>
+    </body></html>`;
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "VitaTrack report" });
+      } else {
+        await Share.share({ url: uri, message: "VitaTrack report" });
+      }
+    } catch (e: any) {
+      console.warn("PDF export failed", e);
+    }
+  }
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -94,13 +119,19 @@ export default function Report() {
         )}
 
         <View style={styles.actions}>
-          <TouchableOpacity testID="report-share" style={styles.primary} onPress={share}>
-            <Share2 size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.primaryTxt}>Share</Text>
+          <TouchableOpacity testID="report-pdf" style={styles.primary} onPress={exportPDF}>
+            <FileDown size={16} color={colors.onBrandPrimary} />
+            <Text style={styles.primaryTxt}>Export PDF</Text>
           </TouchableOpacity>
+          <TouchableOpacity testID="report-share" style={styles.secondary} onPress={share}>
+            <Share2 size={16} color={colors.onSurface} />
+            <Text style={styles.secondaryTxt}>Share text</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.actions, { marginTop: spacing.sm }]}>
           <TouchableOpacity testID="report-copy" style={styles.secondary} onPress={copy}>
             <Copy size={16} color={colors.onSurface} />
-            <Text style={styles.secondaryTxt}>{copied ? "Copied!" : "Copy"}</Text>
+            <Text style={styles.secondaryTxt}>{copied ? "Copied!" : "Copy text"}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

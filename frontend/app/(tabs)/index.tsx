@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndic
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2 } from "lucide-react-native";
+import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -62,6 +62,12 @@ const useStyles = makeStyles((c) => ({
     backgroundColor: c.brandSecondary,
   },
   rangePillTxt: { fontSize: 12, color: c.onBrandSecondary, fontWeight: "700" },
+  streakChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill,
+    backgroundColor: c.warning + "22",
+  },
+  streakTxt: { fontSize: 12, color: c.warning, fontWeight: "700" },
 }));
 
 export default function Dashboard() {
@@ -100,13 +106,21 @@ export default function Dashboard() {
             {user?.name || "Welcome back"}
           </Text>
         </View>
-        <TouchableOpacity
-          testID="open-settings-button"
-          style={styles.iconBtn}
-          onPress={() => router.push("/settings")}
-        >
-          <Settings size={20} color={colors.onSurface} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          {data?.streak_days ? (
+            <View style={styles.streakChip} testID="streak-chip">
+              <Flame size={14} color={colors.warning} />
+              <Text style={styles.streakTxt}>{data.streak_days}d streak</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            testID="open-settings-button"
+            style={styles.iconBtn}
+            onPress={() => router.push("/settings")}
+          >
+            <Settings size={20} color={colors.onSurface} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -226,6 +240,25 @@ export default function Dashboard() {
           >
             <FileText size={16} color={colors.onSurface} />
             <Text style={styles.secondaryBtnTxt}>Share report</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.quickRow}>
+          <TouchableOpacity
+            testID="open-reminders-button"
+            style={styles.secondaryBtn}
+            onPress={() => router.push("/reminders")}
+          >
+            <Bell size={16} color={colors.onSurface} />
+            <Text style={styles.secondaryBtnTxt}>Reminders</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="open-medications-button"
+            style={styles.secondaryBtn}
+            onPress={() => router.push("/medications")}
+          >
+            <Pill size={16} color={colors.onSurface} />
+            <Text style={styles.secondaryBtnTxt}>Medications</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

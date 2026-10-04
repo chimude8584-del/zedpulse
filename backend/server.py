@@ -353,6 +353,28 @@ async def summary(current_user: dict = Depends(get_current_user)):
     in_range_count = sum(1 for g in glucose if g.get("status") == "in_range")
     glucose_in_range_pct = round((in_range_count / len(glucose)) * 100) if glucose else None
 
+    # Streak: consecutive days (counting back from today, Africa/Lusaka UTC+2) with any reading
+    def _day_key(iso: str) -> str:
+        try:
+            dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            # Shift to Africa/Lusaka (UTC+2, no DST)
+            dt = dt + timedelta(hours=2)
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            return ""
+
+    all_readings_days = {_day_key(r["timestamp"]) for r in glucose} | {_day_key(r["timestamp"]) for r in bp}
+    all_readings_days.discard("")
+    today_lsk = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%d")
+    streak = 0
+    cursor_date = datetime.strptime(today_lsk, "%Y-%m-%d")
+    # If no reading today, start counting from yesterday
+    if cursor_date.strftime("%Y-%m-%d") not in all_readings_days:
+        cursor_date -= timedelta(days=1)
+    while cursor_date.strftime("%Y-%m-%d") in all_readings_days:
+        streak += 1
+        cursor_date -= timedelta(days=1)
+
     return {
         "glucose": {
             "latest": glucose[0] if glucose else None,
@@ -366,18 +388,26 @@ async def summary(current_user: dict = Depends(get_current_user)):
             "avg_diastolic": dia_avg,
             "count": len(bp),
         },
+        "streak_days": streak,
     }
 
 
 # -------------------- AI Advice --------------------
 SYSTEM_PROMPT = (
-    "You are a friendly, careful health coach for people managing diabetes and blood pressure. "
+    "You are a friendly, careful health coach for people in Zambia managing diabetes and blood pressure. "
     "Always use mmol/L for glucose and mmHg for blood pressure. "
+    "Tailor diet advice to foods commonly available in Zambia: nshima (prefer smaller portions or mix "
+    "with wholegrain mealie-meal; pair with vegetables and lean protein), kapenta, bream, chicken, beans, "
+    "eggs, vegetables like chibwabwa, rape, impwa, cabbage, tomato and okra, fruits like guava, papaya, "
+    "mango, and oranges in moderation. Flag high-sodium traditional staples (processed kapenta, soya "
+    "pieces heavy in salt, dried fish, bouillon cubes) for people with high blood pressure. "
+    "Encourage walking, affordable local activities, and hydration with water instead of maheu or sodas. "
+    "Mention Zambian context when helpful (community clinics, UTH, nearest health post). "
     "Give concise, practical advice in short bullet points when helpful. "
-    "Cover diet (what to eat / avoid), lifestyle, when hypo/hyper or high/low BP occurs what to do, "
+    "Cover diet (what to eat / avoid), lifestyle, what to do during hypo/hyper or high/low BP, "
     "and general treatment ideas (medications are examples only, not prescriptions). "
     "Always add a short disclaimer that this is not medical advice and to consult a clinician for "
-    "dosing changes or emergencies. Keep responses under 220 words."
+    "dosing changes or emergencies. Keep responses under 240 words."
 )
 
 
@@ -489,6 +519,270 @@ async def report(current_user: dict = Depends(get_current_user)):
 
     text = "\n".join(lines)
     return {"text": text, "generated_at": datetime.now(timezone.utc).isoformat()}
+
+
+# -------------------- Reminders --------------------
+class ReminderIn(BaseModel):
+    label: str
+    time: str  # HH:MM 24h
+    enabled: bool = True
+    kind: Literal["glucose", "bp", "medication", "general"] = "general"
+
+
+@api_router.get("/reminders")
+async def list_reminders(current_user: dict = Depends(get_current_user)):
+    items = await db.reminders.find({"user_id": current_user["id"]}, {"_id": 0}).sort("time", 1).to_list(100)
+    return items
+
+
+@api_router.post("/reminders")
+async def add_reminder(input: ReminderIn, current_user: dict = Depends(get_current_user)):
+    if not input.label.strip():
+        raise HTTPException(status_code=400, detail="Label required")
+    try:
+        hh, mm = input.time.split(":")
+        if not (0 <= int(hh) <= 23 and 0 <= int(mm) <= 59):
+            raise ValueError
+    except Exception:
+        raise HTTPException(status_code=400, detail="Time must be HH:MM")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "label": input.label.strip(),
+        "time": input.time,
+        "enabled": input.enabled,
+        "kind": input.kind,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.reminders.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.patch("/reminders/{reminder_id}")
+async def update_reminder(reminder_id: str, enabled: bool, current_user: dict = Depends(get_current_user)):
+    res = await db.reminders.update_one(
+        {"id": reminder_id, "user_id": current_user["id"]},
+        {"$set": {"enabled": enabled}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+    doc = await db.reminders.find_one({"id": reminder_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/reminders/{reminder_id}")
+async def delete_reminder(reminder_id: str, current_user: dict = Depends(get_current_user)):
+    res = await db.reminders.delete_one({"id": reminder_id, "user_id": current_user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+    return {"ok": True}
+
+
+# -------------------- Medications --------------------
+class MedicationIn(BaseModel):
+    name: str
+    dose: str
+    times_per_day: int = 1
+    note: Optional[str] = ""
+
+
+class MedLogIn(BaseModel):
+    medication_id: str
+    taken_at: Optional[datetime] = None
+
+
+@api_router.get("/medications")
+async def list_meds(current_user: dict = Depends(get_current_user)):
+    meds = await db.medications.find({"user_id": current_user["id"], "deleted_at": {"$exists": False}}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    # Attach today's taken count (Lusaka day boundary)
+    today_lsk = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%d")
+    taken_today = await db.med_logs.find({
+        "user_id": current_user["id"],
+        "day_lsk": today_lsk,
+    }, {"_id": 0}).to_list(500)
+    counts: dict = {}
+    for log in taken_today:
+        counts[log["medication_id"]] = counts.get(log["medication_id"], 0) + 1
+    for m in meds:
+        m["taken_today"] = counts.get(m["id"], 0)
+    return meds
+
+
+@api_router.post("/medications")
+async def add_med(input: MedicationIn, current_user: dict = Depends(get_current_user)):
+    if not input.name.strip() or not input.dose.strip():
+        raise HTTPException(status_code=400, detail="Name and dose required")
+    if not (1 <= input.times_per_day <= 10):
+        raise HTTPException(status_code=400, detail="times_per_day must be 1-10")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "name": input.name.strip(),
+        "dose": input.dose.strip(),
+        "times_per_day": input.times_per_day,
+        "note": input.note or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.medications.insert_one(doc)
+    doc.pop("_id", None)
+    doc["taken_today"] = 0
+    return doc
+
+
+@api_router.delete("/medications/{med_id}")
+async def delete_med(med_id: str, current_user: dict = Depends(get_current_user)):
+    # Soft delete
+    res = await db.medications.update_one(
+        {"id": med_id, "user_id": current_user["id"]},
+        {"$set": {"deleted_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    return {"ok": True}
+
+
+@api_router.post("/medications/log")
+async def log_med(input: MedLogIn, current_user: dict = Depends(get_current_user)):
+    med = await db.medications.find_one({"id": input.medication_id, "user_id": current_user["id"]})
+    if not med:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    ts = input.taken_at or datetime.now(timezone.utc)
+    day_lsk = (ts + timedelta(hours=2)).strftime("%Y-%m-%d") if isinstance(ts, datetime) else ""
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "medication_id": input.medication_id,
+        "taken_at": ts.isoformat() if isinstance(ts, datetime) else str(ts),
+        "day_lsk": day_lsk,
+    }
+    await db.med_logs.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/medications/history")
+async def med_history(current_user: dict = Depends(get_current_user), limit: int = 100):
+    logs = await db.med_logs.find({"user_id": current_user["id"]}, {"_id": 0}).sort("taken_at", -1).limit(limit).to_list(limit)
+    return logs
+
+
+# -------------------- Doctor Share Link --------------------
+def _render_html(user: dict, glucose: list, bp: list) -> str:
+    import html as _html
+    def row_g(g):
+        return f"<tr><td>{g['timestamp'][:16].replace('T',' ')}</td><td>{g['value']} mmol/L</td><td>{_html.escape(str(g.get('context','')))}</td><td class='s-{g.get('severity','')}'>{_html.escape(str(g.get('label','')))}</td></tr>"
+    def row_b(b):
+        pulse = b.get("pulse") or "-"
+        return f"<tr><td>{b['timestamp'][:16].replace('T',' ')}</td><td>{b['systolic']}/{b['diastolic']} mmHg</td><td>{pulse}</td><td class='s-{b.get('severity','')}'>{_html.escape(str(b.get('label','')))}</td></tr>"
+    g_rows = "".join(row_g(g) for g in glucose[:80]) or "<tr><td colspan='4' class='empty'>No readings</td></tr>"
+    b_rows = "".join(row_b(b) for b in bp[:80]) or "<tr><td colspan='4' class='empty'>No readings</td></tr>"
+    name = _html.escape(user.get("name") or "Patient")
+    phone = _html.escape(user.get("phone", ""))
+    return f"""<!doctype html><html><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>VitaTrack — {name}</title>
+<style>
+  :root {{ color-scheme: light; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#FBFAF6; color:#1C2420; padding:24px; }}
+  .wrap {{ max-width:720px; margin:0 auto; }}
+  h1 {{ font-size:24px; margin:0 0 4px; }}
+  .sub {{ color:#6B766F; font-size:14px; margin-bottom:24px; }}
+  .card {{ background:#fff; border:1px solid #E3E0D6; border-radius:16px; padding:20px; margin-bottom:16px; }}
+  h2 {{ font-size:14px; letter-spacing:0.5px; text-transform:uppercase; color:#6B766F; margin:0 0 12px; }}
+  table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+  th,td {{ text-align:left; padding:8px 6px; border-bottom:1px solid #ECE9DF; }}
+  th {{ color:#6B766F; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }}
+  .s-critical {{ color:#B5655C; font-weight:700; }}
+  .s-warning {{ color:#C78A2F; font-weight:600; }}
+  .s-ok {{ color:#4A6B53; font-weight:600; }}
+  .empty {{ color:#6B766F; text-align:center; padding:16px; }}
+  .foot {{ color:#6B766F; font-size:12px; margin-top:24px; text-align:center; }}
+</style></head><body><div class='wrap'>
+<h1>VitaTrack · {name}</h1>
+<div class='sub'>{phone} · shared read-only</div>
+<div class='card'><h2>Blood Glucose (mmol/L)</h2>
+<table><tr><th>When</th><th>Value</th><th>Context</th><th>Status</th></tr>{g_rows}</table></div>
+<div class='card'><h2>Blood Pressure (mmHg)</h2>
+<table><tr><th>When</th><th>BP</th><th>Pulse</th><th>Status</th></tr>{b_rows}</table></div>
+<div class='foot'>Self-tracked data — not a medical document.</div>
+</div></body></html>"""
+
+
+@api_router.post("/share/create")
+async def share_create(current_user: dict = Depends(get_current_user)):
+    # Deactivate old links for cleanliness
+    await db.share_links.update_many(
+        {"user_id": current_user["id"], "revoked": {"$ne": True}},
+        {"$set": {"revoked": True}},
+    )
+    token = uuid.uuid4().hex
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "token": token,
+        "user_id": current_user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "revoked": False,
+    }
+    await db.share_links.insert_one(doc)
+    base = os.environ.get("PUBLIC_BASE_URL", "")
+    return {
+        "token": token,
+        "expires_at": expires_at.isoformat(),
+        "path": f"/api/share/{token}",
+        "url": f"{base}/api/share/{token}" if base else None,
+    }
+
+
+@api_router.get("/share/current")
+async def share_current(current_user: dict = Depends(get_current_user)):
+    doc = await db.share_links.find_one(
+        {"user_id": current_user["id"], "revoked": False},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    if not doc:
+        return {"token": None}
+    # Check expiry
+    try:
+        exp = datetime.fromisoformat(doc["expires_at"].replace("Z", "+00:00"))
+        if exp < datetime.now(timezone.utc):
+            return {"token": None}
+    except Exception:
+        pass
+    return {"token": doc["token"], "expires_at": doc["expires_at"]}
+
+
+@api_router.post("/share/revoke")
+async def share_revoke(current_user: dict = Depends(get_current_user)):
+    await db.share_links.update_many(
+        {"user_id": current_user["id"], "revoked": False},
+        {"$set": {"revoked": True}},
+    )
+    return {"ok": True}
+
+
+from fastapi.responses import HTMLResponse
+
+
+@api_router.get("/share/{token}", response_class=HTMLResponse)
+async def share_view(token: str):
+    link = await db.share_links.find_one({"token": token, "revoked": False})
+    if not link:
+        return HTMLResponse("<h1>Link invalid or revoked</h1>", status_code=404)
+    try:
+        exp = datetime.fromisoformat(link["expires_at"].replace("Z", "+00:00"))
+        if exp < datetime.now(timezone.utc):
+            return HTMLResponse("<h1>Link expired</h1>", status_code=410)
+    except Exception:
+        pass
+    user = await db.users.find_one({"id": link["user_id"]}, {"_id": 0, "passcode_hash": 0})
+    glucose = await db.glucose_readings.find({"user_id": link["user_id"]}, {"_id": 0}).sort("timestamp", -1).limit(100).to_list(100)
+    bp = await db.bp_readings.find({"user_id": link["user_id"]}, {"_id": 0}).sort("timestamp", -1).limit(100).to_list(100)
+    return HTMLResponse(_render_html(user or {}, glucose, bp))
 
 
 # -------------------- Mount + CORS --------------------

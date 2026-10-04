@@ -50,7 +50,7 @@ export default function Login() {
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+260 ");
   const [passcode, setPasscode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export default function Login() {
           style={styles.input}
           value={phone}
           onChangeText={setPhone}
-          placeholder="+1 555 000 1234"
+          placeholder="+260 97 123 4567"
           placeholderTextColor={colors.muted}
           keyboardType="phone-pad"
           autoComplete="tel"
