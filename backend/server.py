@@ -1074,6 +1074,82 @@ async def weekly_insights(current_user: dict = Depends(get_current_user)):
     }
 
 
+# -------------------- Pharmacy Price Watch (Zambia, ZMW) --------------------
+# Typical retail price ranges for Zambian pharmacies, 2026. Estimates only.
+PHARMACY_ITEMS = [
+    # Diabetes meds
+    {"id": "metformin-500", "name": "Metformin 500 mg", "category": "medication", "subcategory": "diabetes", "pack": "30 tablets", "price_low": 40, "price_high": 80, "note": "First-line Type 2 diabetes. Take with food to reduce stomach upset.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus", "Shoprite Pharmacy", "UTH Pharmacy"]},
+    {"id": "metformin-850", "name": "Metformin 850 mg", "category": "medication", "subcategory": "diabetes", "pack": "30 tablets", "price_low": 50, "price_high": 100, "note": "Higher-strength Metformin, same uses.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "glibenclamide", "name": "Glibenclamide 5 mg", "category": "medication", "subcategory": "diabetes", "pack": "30 tablets", "price_low": 20, "price_high": 50, "note": "Older sulfonylurea. Watch for hypos.", "available_at": ["Pharmanova", "Link Pharmacy", "Government clinics (free)"]},
+    {"id": "glipizide", "name": "Glipizide 5 mg", "category": "medication", "subcategory": "diabetes", "pack": "30 tablets", "price_low": 30, "price_high": 60, "note": "Sulfonylurea; take before meals.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "insulin-mixtard", "name": "Insulin Mixtard 70/30", "category": "medication", "subcategory": "diabetes", "pack": "10 ml vial", "price_low": 150, "price_high": 350, "note": "Keep refrigerated. Check expiry.", "available_at": ["UTH Pharmacy", "Pharmanova", "Link Pharmacy", "Hospital pharmacies"]},
+    {"id": "insulin-humulin-n", "name": "Insulin Humulin N", "category": "medication", "subcategory": "diabetes", "pack": "10 ml vial", "price_low": 200, "price_high": 400, "note": "Intermediate acting. Store in fridge.", "available_at": ["Pharmanova", "Link Pharmacy", "Hospital pharmacies"]},
+    {"id": "insulin-glargine", "name": "Insulin Glargine (Lantus)", "category": "medication", "subcategory": "diabetes", "pack": "3 ml pen", "price_low": 350, "price_high": 700, "note": "Long acting; one injection daily.", "available_at": ["Pharmanova", "Link Pharmacy", "Specialist pharmacies"]},
+    # BP meds
+    {"id": "amlodipine-5", "name": "Amlodipine 5 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 30, "price_high": 70, "note": "Calcium channel blocker; once daily.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus", "Government clinics (free)"]},
+    {"id": "amlodipine-10", "name": "Amlodipine 10 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 40, "price_high": 90, "note": "Higher dose if 5 mg insufficient.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "enalapril-10", "name": "Enalapril 10 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 30, "price_high": 70, "note": "ACE inhibitor. Dry cough is common.", "available_at": ["Pharmanova", "Link Pharmacy", "Government clinics (free)"]},
+    {"id": "losartan-50", "name": "Losartan 50 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 40, "price_high": 100, "note": "ARB; good alternative if cough from ACE.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "hctz-25", "name": "Hydrochlorothiazide 25 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 20, "price_high": 50, "note": "Diuretic; take in the morning.", "available_at": ["Pharmanova", "Link Pharmacy", "Government clinics (free)"]},
+    {"id": "atenolol-50", "name": "Atenolol 50 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 30, "price_high": 70, "note": "Beta blocker.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "nifedipine-sr-20", "name": "Nifedipine SR 20 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 50, "price_high": 120, "note": "Slow-release CCB.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "aspirin-75", "name": "Aspirin 75 mg", "category": "medication", "subcategory": "bp", "pack": "30 tablets", "price_low": 15, "price_high": 40, "note": "Discuss with your doctor before starting.", "available_at": ["Any pharmacy"]},
+
+    # Glucose testing kits
+    {"id": "accu-chek-active", "name": "Glucometer — Accu-Chek Active", "category": "testing", "subcategory": "glucose_meter", "pack": "1 meter", "price_low": 350, "price_high": 600, "note": "Reliable, widely available in Zambia.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus", "MedPlus"]},
+    {"id": "onetouch-select", "name": "Glucometer — OneTouch Select Plus", "category": "testing", "subcategory": "glucose_meter", "pack": "1 meter", "price_low": 400, "price_high": 700, "note": "Simple interface, big display.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "contour-plus", "name": "Glucometer — Contour Plus", "category": "testing", "subcategory": "glucose_meter", "pack": "1 meter", "price_low": 400, "price_high": 650, "note": "Second-chance sampling helps strip waste.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "accu-chek-strips", "name": "Test strips — Accu-Chek Active (50)", "category": "testing", "subcategory": "glucose_strips", "pack": "50 strips", "price_low": 350, "price_high": 500, "note": "Match strips to your meter brand.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "onetouch-strips", "name": "Test strips — OneTouch (50)", "category": "testing", "subcategory": "glucose_strips", "pack": "50 strips", "price_low": 400, "price_high": 550, "note": "Only for OneTouch meters.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "contour-strips", "name": "Test strips — Contour Plus (50)", "category": "testing", "subcategory": "glucose_strips", "pack": "50 strips", "price_low": 400, "price_high": 550, "note": "", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "lancets-100", "name": "Lancets (100 pack)", "category": "testing", "subcategory": "lancets", "pack": "100 lancets", "price_low": 80, "price_high": 150, "note": "Single-use. Dispose safely.", "available_at": ["Any pharmacy"]},
+    {"id": "lancing-device", "name": "Lancing device", "category": "testing", "subcategory": "lancets", "pack": "1 device", "price_low": 80, "price_high": 200, "note": "Usually comes with new glucometer.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "ketone-strips", "name": "Ketone strips (urine)", "category": "testing", "subcategory": "ketone", "pack": "50 strips", "price_low": 60, "price_high": 150, "note": "Use when glucose stays very high.", "available_at": ["Pharmanova", "Link Pharmacy", "Hospital pharmacies"]},
+    {"id": "hba1c-home", "name": "HbA1c home test", "category": "testing", "subcategory": "hba1c", "pack": "1 test", "price_low": 350, "price_high": 700, "note": "Lab test still preferred where available.", "available_at": ["Pharmanova", "Private labs"]},
+
+    # BP monitors
+    {"id": "omron-m2", "name": "BP monitor — Omron M2 Basic", "category": "monitor", "subcategory": "bp_monitor", "pack": "1 monitor", "price_low": 600, "price_high": 900, "note": "Reliable upper-arm digital.", "available_at": ["Pharmanova", "Link Pharmacy", "Health Plus"]},
+    {"id": "omron-m3", "name": "BP monitor — Omron M3", "category": "monitor", "subcategory": "bp_monitor", "pack": "1 monitor", "price_low": 900, "price_high": 1400, "note": "Stores readings; good for home use.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "beurer-bm26", "name": "BP monitor — Beurer BM26", "category": "monitor", "subcategory": "bp_monitor", "pack": "1 monitor", "price_low": 500, "price_high": 800, "note": "Budget-friendly upper-arm.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "microlife-a2", "name": "BP monitor — Microlife BP A2", "category": "monitor", "subcategory": "bp_monitor", "pack": "1 monitor", "price_low": 700, "price_high": 1100, "note": "Afib detection on some models.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "manual-sphyg", "name": "Manual sphygmomanometer + stethoscope", "category": "monitor", "subcategory": "bp_monitor", "pack": "1 set", "price_low": 400, "price_high": 700, "note": "For trained users (nurses, clinicians).", "available_at": ["Medical supply shops"]},
+
+    # Supplies
+    {"id": "insulin-syringes", "name": "Insulin syringes (BD 100-pack)", "category": "testing", "subcategory": "injection", "pack": "100 syringes", "price_low": 120, "price_high": 220, "note": "0.5 ml or 1 ml, 29/30 gauge.", "available_at": ["Pharmanova", "Link Pharmacy", "Hospital pharmacies"]},
+    {"id": "pen-needles", "name": "Pen needles (100 pack)", "category": "testing", "subcategory": "injection", "pack": "100 needles", "price_low": 150, "price_high": 300, "note": "For insulin pen devices.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+    {"id": "glucose-tablets", "name": "Glucose tablets (10 pack)", "category": "testing", "subcategory": "hypo_rescue", "pack": "10 tablets", "price_low": 25, "price_high": 60, "note": "For quick hypo rescue — keep in bag.", "available_at": ["Pharmanova", "Link Pharmacy", "Shoprite"]},
+    {"id": "sharps-bin", "name": "Sharps disposal bin (small)", "category": "testing", "subcategory": "injection", "pack": "1 bin", "price_low": 60, "price_high": 150, "note": "Safe disposal of needles/lancets.", "available_at": ["Pharmanova", "Link Pharmacy"]},
+]
+
+ZAMBIA_PHARMACIES = [
+    {"name": "Pharmanova", "note": "Nationwide chain. Branches in Lusaka, Ndola, Kitwe, Livingstone."},
+    {"name": "Link Pharmacy", "note": "Nationwide chain with 24-hour branches in Lusaka."},
+    {"name": "Health Plus Pharmacy", "note": "Lusaka and Copperbelt branches."},
+    {"name": "Shoprite Pharmacy", "note": "In-store pharmacies at Shoprite outlets."},
+    {"name": "MedPlus Pharmacy", "note": "Lusaka branches, competitive prices."},
+    {"name": "CashPlus Pharmacy", "note": "Budget-friendly outlets in Lusaka."},
+    {"name": "UTH Pharmacy", "note": "University Teaching Hospital — subsidized for inpatients."},
+    {"name": "Government clinics", "note": "Essential meds often free at MoH clinics (availability varies)."},
+    {"name": "ZDA Clinic Pharmacy", "note": "Zambia Diabetes Association — diabetes-focused supplies."},
+]
+
+
+@api_router.get("/pharmacy/items")
+async def pharmacy_items(category: Optional[str] = None, q: Optional[str] = None):
+    items = PHARMACY_ITEMS
+    if category and category != "all":
+        items = [i for i in items if i["category"] == category]
+    if q:
+        qq = q.lower().strip()
+        items = [i for i in items if qq in i["name"].lower() or qq in i.get("note", "").lower()]
+    return items
+
+
+@api_router.get("/pharmacy/stockists")
+async def pharmacy_stockists():
+    return ZAMBIA_PHARMACIES
+
+
 # -------------------- Mount + CORS --------------------
 app.include_router(api_router)
 app.add_middleware(

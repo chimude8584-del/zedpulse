@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp } from "lucide-react-native";
+import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store } from "lucide-react-native";
 
 import { api, clearToken } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -92,6 +92,11 @@ export default function Settings() {
         <TouchableOpacity testID="settings-clinics" style={styles.item} onPress={() => router.push("/clinics")}>
           <Hospital size={18} color={colors.brand} />
           <Text style={styles.itemTxt}>Nearby clinics</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="settings-pharmacy" style={styles.item} onPress={() => router.push("/pharmacy")}>
+          <Store size={18} color={colors.brand} />
+          <Text style={styles.itemTxt}>Pharmacy watch</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-insights" style={styles.item} onPress={() => router.push("/weekly-insights")}>

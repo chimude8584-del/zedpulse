@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndic
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle } from "lucide-react-native";
+import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle, Store } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -315,6 +315,15 @@ export default function Dashboard() {
         >
           <TrendingUp size={16} color={colors.onSurface} />
           <Text style={styles.secondaryBtnTxt}>Weekly insights</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          testID="open-pharmacy-button"
+          style={[styles.secondaryBtn, { marginTop: 0 }]}
+          onPress={() => router.push("/pharmacy")}
+        >
+          <Store size={16} color={colors.onSurface} />
+          <Text style={styles.secondaryBtnTxt}>Pharmacy prices (ZMW)</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

@@ -118,4 +118,14 @@ export const api = {
 
   // Insights
   weeklyInsights: () => request<any>("/insights/weekly"),
+
+  // Pharmacy
+  pharmacyItems: (category?: string, q?: string) => {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return request<any[]>(`/pharmacy/items${qs ? `?${qs}` : ""}`);
+  },
+  pharmacyStockists: () => request<any[]>("/pharmacy/stockists"),
 };
