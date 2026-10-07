@@ -6,6 +6,7 @@ import { Activity, HeartPulse, Check } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
+import { HypoRescueCard } from "@/src/components/hypo-rescue-card";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -265,6 +266,16 @@ export default function LogScreen() {
               </View>
               <Text style={styles.resultMsg}>{result.message}</Text>
             </View>
+          ) : null}
+
+          {result && (result.status === "hypo" || result.status === "severe_hypo") ? (
+            <HypoRescueCard
+              severity={result.status === "severe_hypo" ? "critical" : "warning"}
+              onRecheck={() => {
+                setResult(null);
+                setGValue("");
+              }}
+            />
           ) : null}
 
           <TouchableOpacity

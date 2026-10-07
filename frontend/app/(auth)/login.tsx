@@ -6,6 +6,8 @@ import { Activity, HeartPulse } from "lucide-react-native";
 
 import { api, setToken } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
+import { storage } from "@/src/utils/storage";
+import { ONBOARDED_KEY } from "@/app/onboarding";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -71,7 +73,13 @@ export default function Login() {
         ? await api.login(phone, passcode)
         : await api.signup(phone, passcode, name);
       await setToken(resp.token);
-      router.replace("/(tabs)");
+      if (mode === "signup") {
+        await storage.setItem(ONBOARDED_KEY, "");
+        router.replace("/onboarding");
+      } else {
+        const done = await storage.getItem<string>(ONBOARDED_KEY, "");
+        router.replace(done ? "/(tabs)" : "/onboarding");
+      }
     } catch (e: any) {
       setError(e.message || "Something went wrong");
     } finally {

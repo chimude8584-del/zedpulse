@@ -99,7 +99,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     user_id = payload.get("sub")
-    user = await db.users.find_one({"id": user_id}, {"_id": 0, "passcode_hash": 0})
+    user = await db.users.find_one({"id": user_id, "deleted_at": {"$exists": False}}, {"_id": 0, "passcode_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
@@ -162,6 +162,21 @@ async def login(input: LoginInput):
 @api_router.get("/auth/me")
 async def me(current_user: dict = Depends(get_current_user)):
     return current_user
+
+
+@api_router.delete("/auth/account")
+async def delete_account(current_user: dict = Depends(get_current_user)):
+    """Soft-delete the user: mark deleted_at, and soft-remove their data."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    uid = current_user["id"]
+    await db.users.update_one({"id": uid}, {"$set": {"deleted_at": now_iso, "phone": f"deleted-{uid}"}})
+    await db.glucose_readings.update_many({"user_id": uid}, {"$set": {"deleted_at": now_iso}})
+    await db.bp_readings.update_many({"user_id": uid}, {"$set": {"deleted_at": now_iso}})
+    await db.medications.update_many({"user_id": uid}, {"$set": {"deleted_at": now_iso}})
+    await db.reminders.update_many({"user_id": uid}, {"$set": {"deleted_at": now_iso}})
+    await db.share_links.update_many({"user_id": uid, "revoked": False}, {"$set": {"revoked": True}})
+    await db.emergency_contacts.delete_one({"user_id": uid})
+    return {"ok": True}
 
 
 # -------------------- Glucose --------------------

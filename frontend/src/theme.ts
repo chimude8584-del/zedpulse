@@ -2,10 +2,17 @@
 // Keys match the `color` block of design_guidelines. Use pairs: `key` background
 // + `onKey` for text/icon on top. Build sheets via `makeStyles((colors) => ...)`.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Appearance, StyleSheet, useColorScheme } from "react-native";
 
+import { storage } from "@/src/utils/storage";
+
 export type ColorScheme = "light" | "dark";
+export type ThemePref = "system" | "light" | "dark";
+
+const PREF_KEY = "zedpulse.theme-pref";
+let currentPref: ThemePref = "system";
+const listeners = new Set<() => void>();
 
 const light = {
   // Surfaces — warm off-whites
@@ -83,16 +90,39 @@ export type ThemeColors = typeof light;
 export const defaultScheme = "light" satisfies ColorScheme;
 export const themes: { light: ThemeColors; dark?: ThemeColors } = { light, dark };
 
-export function setColorScheme(scheme: ColorScheme | null) {
-  Appearance.setColorScheme?.(scheme ?? "unspecified");
+// Load preference once from storage on module init.
+(async () => {
+  try {
+    const stored = (await storage.getItem<ThemePref>(PREF_KEY, "system")) as ThemePref;
+    if (stored === "light" || stored === "dark" || stored === "system") {
+      currentPref = stored;
+      listeners.forEach((l) => l());
+    }
+  } catch {}
+})();
+
+export async function setThemePref(pref: ThemePref) {
+  currentPref = pref;
+  try { await storage.setItem(PREF_KEY, pref); } catch {}
+  listeners.forEach((l) => l());
 }
 
-setColorScheme?.(themes.dark ? null : defaultScheme);
+export function getThemePref(): ThemePref {
+  return currentPref;
+}
 
-export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
+export function useTheme(): { scheme: ColorScheme; colors: ThemeColors; pref: ThemePref } {
   const system = useColorScheme();
-  const scheme: ColorScheme = system && themes[system] ? system : defaultScheme;
-  return { scheme, colors: themes[scheme] ?? themes.light };
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const l = () => setTick((t) => t + 1);
+    listeners.add(l);
+    return () => { listeners.delete(l); };
+  }, []);
+  const pref = currentPref;
+  const effective: ColorScheme =
+    pref === "light" ? "light" : pref === "dark" ? "dark" : (system && themes[system] ? system : defaultScheme);
+  return { scheme: effective, colors: themes[effective] ?? themes.light, pref };
 }
 
 export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(

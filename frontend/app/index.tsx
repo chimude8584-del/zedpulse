@@ -4,6 +4,8 @@ import { useRouter } from "expo-router";
 
 import { getToken } from "@/src/api";
 import { useTheme } from "@/src/theme";
+import { storage } from "@/src/utils/storage";
+import { ONBOARDED_KEY } from "@/app/onboarding";
 
 export default function Index() {
   const router = useRouter();
@@ -12,8 +14,12 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       const token = await getToken();
-      if (token) router.replace("/(tabs)");
-      else router.replace("/(auth)/login");
+      if (!token) {
+        router.replace("/(auth)/login");
+        return;
+      }
+      const done = await storage.getItem<string>(ONBOARDED_KEY, "");
+      router.replace(done ? "/(tabs)" : "/onboarding");
     })();
   }, [router]);
 

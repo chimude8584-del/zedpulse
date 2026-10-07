@@ -1,11 +1,12 @@
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
+import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store } from "lucide-react-native";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2 } from "lucide-react-native";
 
 import { api, clearToken } from "@/src/api";
-import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
+import { makeStyles, useTheme, spacing, radius, setThemePref, type ThemePref } from "@/src/theme";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -39,14 +40,32 @@ const useStyles = makeStyles((c) => ({
   logoutTxt: { color: c.error, fontSize: 15, fontWeight: "600" },
   footer: { padding: spacing.xl, alignItems: "center" },
   footerTxt: { fontSize: 12, color: c.muted, textAlign: "center" },
+  themeSection: { marginHorizontal: spacing.xl, marginTop: spacing.lg, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
+  sectionLabel: { fontSize: 11, fontWeight: "700", color: c.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: spacing.md },
+  themeRow: { flexDirection: "row", gap: spacing.sm },
+  themeChip: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: radius.md, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+  themeChipActive: { backgroundColor: c.brandPrimary, borderColor: c.brandPrimary },
+  themeChipTxt: { fontSize: 13, color: c.onSurfaceTertiary, fontWeight: "600" },
+  themeChipTxtActive: { color: c.onBrandPrimary, fontWeight: "700" },
+  deleteTrigger: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  deleteTriggerTxt: { color: c.error, fontSize: 14, fontWeight: "600" },
+  deleteCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.error },
+  deleteTitle: { fontSize: 16, fontWeight: "700", color: c.error, marginBottom: spacing.xs },
+  deleteBody: { fontSize: 13, color: c.onSurfaceTertiary, lineHeight: 18 },
+  deleteBtn: { flex: 1, paddingVertical: 12, borderRadius: radius.md, alignItems: "center" },
+  deleteCancel: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+  deleteCancelTxt: { color: c.onSurface, fontSize: 14, fontWeight: "600" },
+  deleteConfirm: { backgroundColor: c.error },
+  deleteConfirmTxt: { color: c.onError, fontSize: 14, fontWeight: "700" },
 }));
 
 export default function Settings() {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, pref } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: () => api.me() });
 
@@ -57,6 +76,15 @@ export default function Settings() {
     qc.clear();
     router.replace("/(auth)/login");
   }
+
+  const delMut = useMutation({
+    mutationFn: () => api.deleteAccount(),
+    onSuccess: async () => {
+      await clearToken();
+      qc.clear();
+      router.replace("/(auth)/login");
+    },
+  });
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -124,10 +152,68 @@ export default function Settings() {
           <Text style={styles.itemTxt}>Units: mmol/L · mmHg · Zambia</Text>
         </View>
 
+        <View style={styles.themeSection}>
+          <Text style={styles.sectionLabel}>Appearance</Text>
+          <View style={styles.themeRow}>
+            {(["system", "light", "dark"] as ThemePref[]).map((p) => {
+              const active = pref === p;
+              const Icon = p === "system" ? Monitor : p === "light" ? Sun : Moon;
+              return (
+                <TouchableOpacity
+                  key={p}
+                  testID={`theme-${p}`}
+                  style={[styles.themeChip, active && styles.themeChipActive]}
+                  onPress={() => setThemePref(p)}
+                >
+                  <Icon size={16} color={active ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
+                  <Text style={[styles.themeChipTxt, active && styles.themeChipTxtActive]}>
+                    {p === "system" ? "System" : p === "light" ? "Light" : "Dark"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         <TouchableOpacity testID="settings-logout" style={styles.logout} onPress={logout}>
           <LogOut size={18} color={colors.error} />
           <Text style={styles.logoutTxt}>Sign out</Text>
         </TouchableOpacity>
+
+        {confirmDel ? (
+          <View style={styles.deleteCard} testID="delete-confirm">
+            <Text style={styles.deleteTitle}>Delete account?</Text>
+            <Text style={styles.deleteBody}>
+              This permanently removes your readings, medications, reminders, and family contact. You cannot undo this.
+            </Text>
+            <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
+              <TouchableOpacity
+                testID="delete-cancel"
+                style={[styles.deleteBtn, styles.deleteCancel]}
+                onPress={() => setConfirmDel(false)}
+              >
+                <Text style={styles.deleteCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="delete-confirm-btn"
+                style={[styles.deleteBtn, styles.deleteConfirm]}
+                onPress={() => delMut.mutate()}
+                disabled={delMut.isPending}
+              >
+                {delMut.isPending ? (
+                  <ActivityIndicator color={colors.onError} />
+                ) : (
+                  <Text style={styles.deleteConfirmTxt}>Yes, delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity testID="settings-delete" style={styles.deleteTrigger} onPress={() => setConfirmDel(true)}>
+            <Trash2 size={16} color={colors.error} />
+            <Text style={styles.deleteTriggerTxt}>Delete account</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.footer}>
           <Text style={styles.footerTxt}>

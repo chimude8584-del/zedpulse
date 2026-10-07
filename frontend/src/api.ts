@@ -54,6 +54,7 @@ export const api = {
   login: (phone: string, passcode: string) =>
     request<AuthResp>("/auth/login", { method: "POST", body: { phone, passcode }, auth: false }),
   me: () => request<any>("/auth/me"),
+  deleteAccount: () => request<any>("/auth/account", { method: "DELETE" }),
 
   // Glucose
   addGlucose: (body: { value: number; context: string; note?: string }) =>
