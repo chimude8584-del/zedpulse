@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.vitalsmonitor.slpdy0",
+      "bundleIdentifier": "com.zedpulse.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan meals to log carbs",
         "NSPhotoLibraryUsageDescription": "Pick meal photos to log carbs",
@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#4A6B53"
       },
-      "package": "com.emergent.vitalsmonitor.slpdy0",
+      "package": "com.zedpulse.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
