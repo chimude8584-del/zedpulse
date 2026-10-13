@@ -1,13 +1,49 @@
 // Local notification scheduling (no remote push).
-// Works in Expo Go on iOS and Android for daily local reminders.
-import * as Notifications from "expo-notifications";
+// Works on dev/production builds. On Expo Go Android (SDK 53+) local
+// scheduling is limited — we fail soft so the Reminders screen still works
+// and the reminder is still saved on the server.
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 
 import { storage } from "@/src/utils/storage";
 
 const MAP_KEY = "glucobp.reminder.notifId";
 
-// Keep a per-reminder notification id map in storage.
+// Lazy, defensive load — if the native module is unavailable (web, SSR, Expo
+// Go on Android), we return null and callers no-op.
+let _notifs: any = null;
+function getNotifications(): any | null {
+  if (_notifs !== null) return _notifs;
+  if (Platform.OS === "web") return (_notifs = null);
+  // In Expo Go on Android, remote push is gone; local scheduling can still
+  // throw on some devices. Guard the import and the handler setup.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("expo-notifications");
+    try {
+      mod.setNotificationHandler?.({
+        handleNotification: async () => ({
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    } catch {
+      // handler setup is non-fatal
+    }
+    _notifs = mod;
+    return mod;
+  } catch {
+    _notifs = null;
+    return null;
+  }
+}
+
+export function isExpoGo(): boolean {
+  return (Constants as any)?.appOwnership === "expo";
+}
+
 async function getMap(): Promise<Record<string, string>> {
   const v = await storage.getItem<string>(MAP_KEY, "{}");
   try {
@@ -20,23 +56,21 @@ async function setMap(m: Record<string, string>) {
   await storage.setItem(MAP_KEY, JSON.stringify(m));
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
-export async function ensureNotificationPermission(): Promise<"granted" | "denied" | "blocked"> {
-  if (Platform.OS === "web") return "denied";
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) return "granted";
-  if (!current.canAskAgain) return "blocked";
-  const req = await Notifications.requestPermissionsAsync();
-  if (req.granted) return "granted";
-  return req.canAskAgain ? "denied" : "blocked";
+export async function ensureNotificationPermission(): Promise<
+  "granted" | "denied" | "blocked" | "unsupported"
+> {
+  const Notif = getNotifications();
+  if (!Notif) return "unsupported";
+  try {
+    const current = await Notif.getPermissionsAsync();
+    if (current.granted) return "granted";
+    if (!current.canAskAgain) return "blocked";
+    const req = await Notif.requestPermissionsAsync();
+    if (req.granted) return "granted";
+    return req.canAskAgain ? "denied" : "blocked";
+  } catch {
+    return "unsupported";
+  }
 }
 
 export async function scheduleDailyReminder(
@@ -44,32 +78,37 @@ export async function scheduleDailyReminder(
   label: string,
   time: string, // "HH:MM"
 ): Promise<string | null> {
-  if (Platform.OS === "web") return null;
+  const Notif = getNotifications();
+  if (!Notif) return null;
   const [h, m] = time.split(":").map((n) => parseInt(n, 10));
   if (isNaN(h) || isNaN(m)) return null;
-  // Cancel existing first
   await cancelReminder(reminderId);
-  const id = await Notifications.scheduleNotificationAsync({
-    content: { title: "VitaTrack reminder", body: label },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: h,
-      minute: m,
-    } as any,
-  });
-  const map = await getMap();
-  map[reminderId] = id;
-  await setMap(map);
-  return id;
+  try {
+    const id = await Notif.scheduleNotificationAsync({
+      content: { title: "ZedPulse reminder", body: label },
+      trigger: {
+        type: Notif.SchedulableTriggerInputTypes?.DAILY ?? "daily",
+        hour: h,
+        minute: m,
+      } as any,
+    });
+    const map = await getMap();
+    map[reminderId] = id;
+    await setMap(map);
+    return id;
+  } catch {
+    return null;
+  }
 }
 
 export async function cancelReminder(reminderId: string) {
-  if (Platform.OS === "web") return;
+  const Notif = getNotifications();
+  if (!Notif) return;
   const map = await getMap();
   const nid = map[reminderId];
   if (nid) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(nid);
+      await Notif.cancelScheduledNotificationAsync(nid);
     } catch {}
     delete map[reminderId];
     await setMap(map);

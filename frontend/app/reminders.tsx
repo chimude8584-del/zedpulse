@@ -7,7 +7,7 @@ import { ArrowLeft, Bell, Trash2, Plus, Clock } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
-import { ensureNotificationPermission, scheduleDailyReminder, cancelReminder } from "@/src/utils/reminders";
+import { ensureNotificationPermission, scheduleDailyReminder, cancelReminder, isExpoGo } from "@/src/utils/reminders";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -100,6 +100,8 @@ export default function Reminders() {
       setError("Notifications are blocked. Enable them in Settings.");
       return;
     }
+    // Even if unsupported (Expo Go), we still save the reminder so the user
+    // sees it listed. It'll start firing on a real build.
     addMut.mutate();
   }
 
@@ -119,6 +121,13 @@ export default function Reminders() {
         {Platform.OS === "web" && (
           <View style={styles.warn}>
             <Text style={styles.warnTxt}>Reminders need the mobile app — scan the Expo Go QR to try them.</Text>
+          </View>
+        )}
+        {Platform.OS !== "web" && isExpoGo() && (
+          <View style={styles.warn} testID="rem-expogo-warn">
+            <Text style={styles.warnTxt}>
+              Expo Go on Android can&apos;t schedule push alerts anymore. Reminders you add here will save, and they&apos;ll start firing once the app is installed as a build. The rest of the app still works normally.
+            </Text>
           </View>
         )}
         {permState === "blocked" && (
