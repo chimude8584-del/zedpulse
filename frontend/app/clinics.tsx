@@ -15,9 +15,8 @@ const useStyles = makeStyles((c) => ({
   back: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border },
   title: { fontSize: 22, fontWeight: "700", color: c.onSurface, flex: 1 },
   locBtn: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: c.brandPrimary, alignItems: "center", justifyContent: "center" },
-  chipsRow: { paddingHorizontal: spacing.xl, flexDirection: "row", gap: spacing.sm, paddingBottom: spacing.md },
-  chipScroll: { paddingBottom: spacing.md, marginBottom: spacing.md, maxHeight: 60 },
-  chipScrollContent: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: "center" },
+  chipTrack: { height: 56, marginBottom: spacing.md, justifyContent: "center" },
+  chipScrollContent: { paddingHorizontal: spacing.xl, alignItems: "center" },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, flexShrink: 0, marginRight: spacing.sm, minHeight: 36, justifyContent: "center" },
   chipActive: { backgroundColor: c.brandSecondary, borderColor: c.brand },
   chipTxt: { fontSize: 13, color: c.onSurface, fontWeight: "700" },
@@ -126,27 +125,28 @@ export default function Clinics() {
         </View>
       )}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipScrollContent}
-        style={styles.chipScroll}
-      >
-        {CITIES.map((c) => {
-          const active = city === c;
-          return (
-            <TouchableOpacity
-              key={c}
-              testID={`clinic-city-${c}`}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => setCity(c)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.chipTxt, active && styles.chipTxtActive]} numberOfLines={1}>{c}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.chipTrack}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScrollContent}
+        >
+          {CITIES.map((c) => {
+            const active = city === c;
+            return (
+              <TouchableOpacity
+                key={c}
+                testID={`clinic-city-${c}`}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setCity(c)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.chipTxt, active && styles.chipTxtActive]} numberOfLines={1}>{c}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {q.isLoading ? (
         <ActivityIndicator color={colors.brand} />

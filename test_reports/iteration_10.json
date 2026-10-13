@@ -1,0 +1,22 @@
+{
+  "summary": "Re-verified chip-row vs first-card overlap on /pharmacy and /clinics at mobile viewport 390x844 after wrapper-View fix. DOM getBoundingClientRect() confirms STRICT NO-OVERLAP on BOTH screens with a comfortable 21.5px gap. Pharmacy: chipTrack ancestor DIV h=56 (y=157), chip 'All' bbox y=166.5 h=37 bottom=203.5, Metformin 500 mg card top=225 -> GAP=+21.5px. Clinics: chipTrack ancestor DIV h=56 (y=64), chip 'All' bbox y=73.5 h=37 bottom=110.5, UTH card top=132 -> GAP=+21.5px. All 4 pharmacy chips (All/Medications/Testing kits/BP monitors) and all 12 clinic city chips (All, Lusaka, Ndola, Kitwe, Livingstone, Chingola, Kabwe, Chipata, Mongu, Solwezi, Kasama, Choma) render with full labels + icons. Filtering works: 'Testing kits' hides Metformin & shows strips/glucose; 'Lusaka' narrows to 18 Lusaka clinics; 'All' restores to 34 pharmacy items / 40 clinic cards. Chips are vertically centered within the 56px track (chip center = track center = 185 on pharmacy, = 92 on clinics). Clean ~16px separation (via marginBottom: spacing.md on chipTrack) between chip track bottom and first list card. Fix is complete and verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "clinics.tsx and pharmacy.tsx both still reference `styles.chipScrollContent`; only `styles.chipScroll` was removed per request. Final naming is consistent (chipTrack + chipScrollContent). No leftover dead styles observed in pharmacy.tsx; clinics.tsx no longer defines `chipsRow` either. Clean."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100% (strict no-overlap on both screens, filtering works, chips centered, all labels visible)"},
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Chip overlap bug on /pharmacy and /clinics is fully resolved. Measurement method for future regression: at viewport 390x844, read getBoundingClientRect of [data-testid=\"pharm-cat-all\"] / [data-testid=\"pharm-metformin-500\"] and [data-testid=\"clinic-city-All\"] / [data-testid=\"clinic-University Teaching Hospital (UTH)\"]. Pass criterion: card.top - chip.bottom > 0. Current gap on both screens is +21.5px.",
+  "rca_of_issue": "Previous iterations put height:56 directly on the horizontal ScrollView (via style={styles.chipScroll}). In react-native-web the outer wrapper div for a horizontal ScrollView collapses to its content container's intrinsic height, so the 56px height did not take effect and the 37px chip overflowed its track. Current fix wraps the ScrollView in a plain <View style={{height:56, marginBottom:spacing.md, justifyContent:'center'}}>. Plain Views DO honor explicit height in RN-web, so the chip is now vertically centered within the fixed 56px track and marginBottom pushes the list cleanly below. Verified via DOM: chipTrack ancestor DIV reports h=56 on both screens, and card.top - chip.bottom = +21.5px on both."
+}

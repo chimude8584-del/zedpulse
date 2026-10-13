@@ -1,0 +1,36 @@
+{
+  "summary": "Visual-layout retest of chip-row vs list overlap on /pharmacy and /clinics. BUG IS NOT FULLY FIXED. Removing maxHeight on chipScroll was insufficient. On BOTH screens the horizontal ScrollView wrapper that holds the chip row now has NO vertical height and collapses in the parent flex column (measured wrapper height = 4.6 px on pharmacy, 5.5 px on clinics). The chip TouchableOpacity itself still renders 37 px tall and overflows visually above/below that collapsed wrapper, so the following FlatList starts underneath the chips. Measured overlap: pharmacy chip bottom = 177.83, first item (Metformin 500 mg) top = 173.64 -> overlap of ~4.2 px; clinics chip bottom = 85.25, first item (UTH) top = 81.5 -> overlap of ~3.75 px. Screenshots clearly show the first list card border cutting through the bottom of the chip pills ('All / Medications / Testing kits' on pharmacy and 'All / Lusaka / Ndola / Kitwe / Livingstone' on clinics). Chip filtering logic itself works correctly (Testing kits -> glucometers/strips; Lusaka -> 18 Lusaka clinics).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "pharmacy.tsx chipScroll", "issue": "Horizontal ScrollView wrapper collapses to ~4.6 px tall in react-native-web; chip pills (37 px) visually overflow and overlap the first FlatList item (Metformin 500 mg) by ~4 px. Reference: /app/frontend/app/pharmacy.tsx:19 (chipScroll has only `marginBottom: spacing.md` with no height).", "testID": "pharm-cat-all / pharm-metformin-500", "priority": "HIGH"},
+      {"component": "clinics.tsx chipScroll", "issue": "Same bug: horizontal ScrollView wrapper collapses to ~5.5 px tall; chip pills (37 px) overflow and the first clinic card (UTH) overlaps the bottom of the city chips by ~4 px. Reference: /app/frontend/app/clinics.tsx:19 (chipScroll has only `marginBottom: spacing.md` with no height).", "testID": "clinic-city-All / clinic-University Teaching Hospital (UTH)", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/pharmacy", "issues": ["Chip row bottom edge is BELOW the first item's top edge (177.83 vs 173.64). Visible clipping of chip pills by the Metformin card border."]},
+      {"screen": "/clinics", "issues": ["Chip row bottom edge is BELOW the first item's top edge (85.25 vs 81.5). Visible clipping of city chips by the UTH card border. Also no visible gap between header and chip row because chip wrapper has zero height and chip overflows upward into the header's bottom padding."]}
+    ],
+    "react_native_issues": [
+      {"component": "ScrollView (horizontal)", "issue": "react-native-web collapses a horizontal ScrollView to the height of its content container when no explicit `height` is set on the wrapper. Because the inner contentContainerStyle has `alignItems: 'center'` and the chip is `flexShrink: 0` with minHeight 36 + paddingVertical 10, the wrapper doesn't size to chip height and the chip overflows visually. The parent flex column therefore places the FlatList right under the collapsed wrapper, visually overlapping the chip pills. Fix: give chipScroll an explicit `height` (e.g. 56 or 60) in BOTH pharmacy.tsx and clinics.tsx."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_8.json"],
+  "action_items": [
+    "In /app/frontend/app/pharmacy.tsx line 19, change `chipScroll: { marginBottom: spacing.md }` to `chipScroll: { height: 56, marginBottom: spacing.md }` (or wrap the ScrollView in a <View style={{ height: 56 }}>). This gives the chip row a concrete track that pushes the FlatList below it.",
+    "Apply the identical change in /app/frontend/app/clinics.tsx line 19.",
+    "Re-measure after the fix: chipScroll bottom edge must be <= first item top edge on both screens; the chip pill borders must have clear white space between them and the first list card.",
+    "Keep `alignItems: 'center'` in chipScrollContent so chips remain vertically centered inside the 56 px track; keep `flexShrink: 0` on chip so horizontal scrolling continues to work."
+  ],
+  "critical_code_review_comments": [
+    "The previous fix removed `maxHeight` but did not add a replacement `height`. In react-native-web, a horizontal ScrollView with no explicit height can collapse to near-zero, which is exactly what is happening here (measured 4.6 px and 5.5 px wrappers).",
+    "Both pharmacy.tsx and clinics.tsx also keep a dead `chipsRow` style (clinics.tsx line 18) that is not used anywhere - minor cleanup opportunity."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "40% - chip filtering works but the reported overlap bug is still visually present on both screens"},
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "After main agent adds explicit height to chipScroll on both screens, open /pharmacy and /clinics at viewport 390x844 and run the DOM measurement: `chipAll = document.querySelector('[data-testid=\"pharm-cat-all\"]'); firstItem = document.querySelector('[data-testid=\"pharm-metformin-500\"]'); chipAll.getBoundingClientRect().bottom <= firstItem.getBoundingClientRect().top`. Same for clinic-city-All vs the first clinic card. The chip ScrollView WRAPPER (parent of chip) must have height >= chip height (not ~5 px as it is today).",
+  "rca_of_issue": "Root cause: in react-native-web, a horizontal `<ScrollView>` with `alignItems: 'center'` on contentContainerStyle, `flexShrink: 0` on children, and NO explicit height on the wrapper style, collapses vertically because the parent is a flex column with `flex: 1` on sibling content. The ScrollView's intrinsic cross-axis height becomes the height dictated by its inner flex children's alignment, which here resolves to near-zero (observed 4.6-5.5 px). The chip TouchableOpacity still paints at its natural 37 px size by overflowing the collapsed wrapper (negative margins effectively), so the next sibling (FlatList) is positioned where the wrapper 'ends', not where the chip visually ends. Mitigation: set `chipScroll.height = 56` (or at least 48) so the wrapper reserves vertical space equal to the chip pill. Then normal flex column flow pushes the FlatList below it with no overlap."
+}

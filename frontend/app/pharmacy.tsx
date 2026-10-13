@@ -16,8 +16,8 @@ const useStyles = makeStyles((c) => ({
   subtitle: { paddingHorizontal: spacing.xl, color: c.muted, fontSize: 13, marginBottom: spacing.md },
   search: { marginHorizontal: spacing.xl, marginBottom: spacing.md, backgroundColor: c.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.md, gap: 8 },
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 15, color: c.onSurface },
-  chipScroll: { paddingBottom: spacing.md, maxHeight: 56 },
-  chipScrollContent: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: "center" },
+  chipTrack: { height: 56, marginBottom: spacing.md, justifyContent: "center" },
+  chipScrollContent: { paddingHorizontal: spacing.xl, alignItems: "center" },
   chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, flexDirection: "row", alignItems: "center", flexShrink: 0, marginRight: spacing.sm, minHeight: 36 },
   chipActive: { backgroundColor: c.brandSecondary, borderColor: c.brand },
   chipIcon: { marginRight: 6 },
@@ -96,33 +96,34 @@ export default function Pharmacy() {
         />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipScrollContent}
-        style={styles.chipScroll}
-      >
-        {CATEGORIES.map((c) => {
-          const active = category === c.key;
-          const Icon = c.Icon;
-          return (
-            <TouchableOpacity
-              key={c.key}
-              testID={`pharm-cat-${c.key}`}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => setCategory(c.key)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.chipIcon}>
-                <Icon size={14} color={active ? colors.onBrandSecondary : colors.onSurface} />
-              </View>
-              <Text style={[styles.chipTxt, active && styles.chipTxtActive]} numberOfLines={1}>
-                {c.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.chipTrack}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScrollContent}
+        >
+          {CATEGORIES.map((c) => {
+            const active = category === c.key;
+            const Icon = c.Icon;
+            return (
+              <TouchableOpacity
+                key={c.key}
+                testID={`pharm-cat-${c.key}`}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setCategory(c.key)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.chipIcon}>
+                  <Icon size={14} color={active ? colors.onBrandSecondary : colors.onSurface} />
+                </View>
+                <Text style={[styles.chipTxt, active && styles.chipTxtActive]} numberOfLines={1}>
+                  {c.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {itemsQ.isLoading ? (
         <ActivityIndicator color={colors.brand} />
