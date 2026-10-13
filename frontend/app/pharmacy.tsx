@@ -16,10 +16,12 @@ const useStyles = makeStyles((c) => ({
   subtitle: { paddingHorizontal: spacing.xl, color: c.muted, fontSize: 13, marginBottom: spacing.md },
   search: { marginHorizontal: spacing.xl, marginBottom: spacing.md, backgroundColor: c.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.md, gap: 8 },
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 15, color: c.onSurface },
-  chipScroll: { paddingBottom: spacing.md },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  chipScroll: { paddingBottom: spacing.md, maxHeight: 56 },
+  chipScrollContent: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: "center" },
+  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, flexDirection: "row", alignItems: "center", flexShrink: 0, marginRight: spacing.sm, minHeight: 36 },
   chipActive: { backgroundColor: c.brandSecondary, borderColor: c.brand },
-  chipTxt: { fontSize: 13, color: c.onSurfaceTertiary, fontWeight: "600" },
+  chipIcon: { marginRight: 6 },
+  chipTxt: { fontSize: 13, color: c.onSurface, fontWeight: "700" },
   chipTxtActive: { color: c.onBrandSecondary },
   item: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
   itemTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
@@ -97,7 +99,7 @@ export default function Pharmacy() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl, paddingBottom: spacing.md }}
+        contentContainerStyle={styles.chipScrollContent}
         style={styles.chipScroll}
       >
         {CATEGORIES.map((c) => {
@@ -109,9 +111,14 @@ export default function Pharmacy() {
               testID={`pharm-cat-${c.key}`}
               style={[styles.chip, active && styles.chipActive]}
               onPress={() => setCategory(c.key)}
+              activeOpacity={0.7}
             >
-              <Icon size={14} color={active ? colors.onBrandSecondary : colors.onSurfaceTertiary} />
-              <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{c.label}</Text>
+              <View style={styles.chipIcon}>
+                <Icon size={14} color={active ? colors.onBrandSecondary : colors.onSurface} />
+              </View>
+              <Text style={[styles.chipTxt, active && styles.chipTxtActive]} numberOfLines={1}>
+                {c.label}
+              </Text>
             </TouchableOpacity>
           );
         })}

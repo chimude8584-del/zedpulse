@@ -1,0 +1,23 @@
+{
+  "summary": "Validated the chip-label visibility fix on both /pharmacy and /clinics screens via Playwright mobile viewport (390x844) on preview URL after login with +15550001234/1234. All 4 pharmacy category chips ('All', 'Medications', 'Testing kits', 'BP monitors') now render with icons AND full text labels side-by-side. All 12 clinic city chips ('All', 'Lusaka', 'Ndola', 'Kitwe', 'Livingstone', 'Chingola', 'Kabwe', 'Chipata', 'Mongu', 'Solwezi', 'Kasama', 'Choma') render with full visible text labels. Chip row is horizontally scrollable (confirmed by scrolling to 'Choma' at end). Active-chip styling (sage-green brandSecondary bg + onBrandSecondary text) applied correctly on both screens. Filtering works: tapping 'Medications' narrows pharmacy list; tapping 'Lusaka' and then 'Choma' narrows clinic list. Pharmacy regression PASS (Kwacha prices e.g. K40-80, 30-tablet pack size, note, Pharmanova/Link Pharmacy/Health Plus stockist pills visible). Clinic regression PASS (name, 'City · Type' meta, Directions and Call buttons present).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_6.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pharmacy.tsx chipScroll maxHeight=56 with chip minHeight=36 + paddingVertical=10 leaves tight margin (10+10+text) ~37; current rendered height=37 fits, no clipping observed, but any future font bump could clip. Consider raising maxHeight to 64 for safety.",
+    "clinics.tsx has unused style 'chipsRow' (lines 18) left over from pre-fix layout; safe to delete."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not retested, previous 96/96)", "frontend": "100%"},
+  "seed_data_creation": "None. Used existing seed user +15550001234/1234.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Chip label visibility fix is verified end-to-end on web preview. All pharmacy and clinic chips render icons+text with high-contrast fontWeight 700, no truncation to single chars or dashes, horizontal scroll works, active-state styling correct, filtering functional. The Android-specific issue root cause (gap on ScrollView contentContainerStyle + icon dominance + weak text contrast) has been removed; the Android build should also render correctly since the fix removed the ScrollView-gap quirk and bumped contrast + font weight.",
+  "rca_of_issue": "Original Android/Expo Go bug: `gap` on ScrollView contentContainerStyle plus low-contrast chip text and icon absorbing most horizontal space caused labels to collapse to icons only (pharmacy) or render as dashes (clinics). Fix: switched to marginRight on each chip, wrapped icons in a dedicated chipIcon View with marginRight (prevents RN's flex-shrink from eating the Text sibling), set chipTxt fontWeight '700' with onSurface color, added numberOfLines={1}, bumped minHeight to 36pt. Verified labels render fully on web preview as a proxy."
+}

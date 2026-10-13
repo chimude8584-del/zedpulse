@@ -16,10 +16,11 @@ const useStyles = makeStyles((c) => ({
   title: { fontSize: 22, fontWeight: "700", color: c.onSurface, flex: 1 },
   locBtn: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: c.brandPrimary, alignItems: "center", justifyContent: "center" },
   chipsRow: { paddingHorizontal: spacing.xl, flexDirection: "row", gap: spacing.sm, paddingBottom: spacing.md },
-  chipScroll: { paddingBottom: spacing.md, marginBottom: spacing.md },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, flexShrink: 0 },
+  chipScroll: { paddingBottom: spacing.md, marginBottom: spacing.md, maxHeight: 60 },
+  chipScrollContent: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: "center" },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, flexShrink: 0, marginRight: spacing.sm, minHeight: 36, justifyContent: "center" },
   chipActive: { backgroundColor: c.brandSecondary, borderColor: c.brand },
-  chipTxt: { fontSize: 13, color: c.onSurfaceTertiary, fontWeight: "600" },
+  chipTxt: { fontSize: 13, color: c.onSurface, fontWeight: "700" },
   chipTxtActive: { color: c.onBrandSecondary },
   item: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
   itemTop: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
@@ -128,7 +129,7 @@ export default function Clinics() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl, paddingBottom: spacing.md }}
+        contentContainerStyle={styles.chipScrollContent}
         style={styles.chipScroll}
       >
         {CITIES.map((c) => {
@@ -139,8 +140,9 @@ export default function Clinics() {
               testID={`clinic-city-${c}`}
               style={[styles.chip, active && styles.chipActive]}
               onPress={() => setCity(c)}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{c}</Text>
+              <Text style={[styles.chipTxt, active && styles.chipTxtActive]} numberOfLines={1}>{c}</Text>
             </TouchableOpacity>
           );
         })}
