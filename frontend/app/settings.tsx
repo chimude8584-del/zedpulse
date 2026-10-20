@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2 } from "lucide-react-native";
+import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2, Shield } from "lucide-react-native";
 
 import { api, clearToken } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius, setThemePref, type ThemePref } from "@/src/theme";
@@ -126,6 +126,13 @@ export default function Settings() {
           <Store size={18} color={colors.brand} />
           <Text style={styles.itemTxt}>Pharmacy watch</Text>
         </TouchableOpacity>
+
+        {user?.role === "admin" ? (
+          <TouchableOpacity testID="settings-admin" style={[styles.item, { borderColor: colors.brand }]} onPress={() => router.push("/admin")}>
+            <Shield size={18} color={colors.brand} />
+            <Text style={[styles.itemTxt, { color: colors.brand, fontWeight: "700" }]}>Admin dashboard</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <TouchableOpacity testID="settings-insights" style={styles.item} onPress={() => router.push("/weekly-insights")}>
           <TrendingUp size={18} color={colors.brand} />

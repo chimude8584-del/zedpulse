@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Linking, Platform, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Search, Pill, Activity, HeartPulse, Package, Store } from "lucide-react-native";
+import { ArrowLeft, Search, Pill, Activity, HeartPulse, Package, Store, Phone, MessageCircle, Plus } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -36,9 +36,18 @@ const useStyles = makeStyles((c) => ({
   stockistTxt: { fontSize: 11, color: c.onBrandTertiary, fontWeight: "600" },
   stockistSection: { marginTop: spacing.lg, marginHorizontal: spacing.xl, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: spacing.sm },
   stockistTitle: { fontSize: 13, fontWeight: "700", color: c.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  stockistRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  stockistRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6 },
   stockistName: { fontSize: 14, fontWeight: "600", color: c.onSurface },
   stockistNote: { fontSize: 12, color: c.muted, marginTop: 2 },
+  contactRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  contactBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1 },
+  callBtn: { backgroundColor: c.brandSecondary, borderColor: c.brand },
+  waBtn: { backgroundColor: c.brandTertiary, borderColor: c.brand },
+  contactBtnTxt: { fontSize: 12, fontWeight: "700", color: c.onBrandSecondary },
+  waTxt: { color: c.onBrandTertiary },
+  noContact: { fontSize: 11, color: c.muted, fontStyle: "italic", marginTop: 6 },
+  suggestBtn: { marginTop: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: c.brand, borderStyle: "dashed", backgroundColor: c.surface },
+  suggestTxt: { fontSize: 13, fontWeight: "700", color: c.brand },
   disclaimer: { marginHorizontal: spacing.xl, marginTop: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: c.brandTertiary },
   disclaimerTxt: { fontSize: 12, color: c.onBrandTertiary, lineHeight: 18 },
   empty: { padding: spacing.xl, alignItems: "center" },
@@ -169,19 +178,81 @@ export default function Pharmacy() {
                     <Store size={14} color={colors.brand} />
                     <Text style={styles.stockistTitle}>Where to buy</Text>
                   </View>
-                  {stockistsQ.data.map((s: any, idx: number) => (
-                    <View key={idx} style={styles.stockistRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.stockistName}>{s.name}</Text>
-                        <Text style={styles.stockistNote}>{s.note}</Text>
+                  {stockistsQ.data.map((s: any, idx: number) => {
+                    const phoneDigits = (s.phone || "").replace(/[^+\d]/g, "");
+                    const waDigits = (s.whatsapp || s.phone || "").replace(/[^\d]/g, "");
+                    const hasPhone = !!phoneDigits;
+                    const hasWA = !!(s.whatsapp || s.phone);
+
+                    const openTel = () => {
+                      const url = `tel:${phoneDigits}`;
+                      Linking.openURL(url).catch(() => {
+                        Alert.alert("Cannot dial", "This device cannot place calls.");
+                      });
+                    };
+                    const openWA = () => {
+                      // Use WhatsApp if whatsapp number present, otherwise try phone number via wa.me
+                      const url = `https://wa.me/${waDigits}`;
+                      Linking.openURL(url).catch(() => {
+                        Alert.alert("WhatsApp not available", "Install WhatsApp to use this feature.");
+                      });
+                    };
+
+                    return (
+                      <View
+                        key={s.id || idx}
+                        style={[styles.stockistRow, { borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: colors.border, flexDirection: "column", alignItems: "stretch", gap: 0 }]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.stockistName}>{s.name}</Text>
+                          {s.note ? <Text style={styles.stockistNote}>{s.note}</Text> : null}
+                        </View>
+                        {hasPhone || hasWA ? (
+                          <View style={styles.contactRow}>
+                            {hasPhone ? (
+                              <TouchableOpacity
+                                testID={`pharm-call-${idx}`}
+                                style={[styles.contactBtn, styles.callBtn]}
+                                onPress={openTel}
+                                activeOpacity={0.7}
+                              >
+                                <Phone size={13} color={colors.onBrandSecondary} />
+                                <Text style={styles.contactBtnTxt}>Call</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            {hasWA ? (
+                              <TouchableOpacity
+                                testID={`pharm-wa-${idx}`}
+                                style={[styles.contactBtn, styles.waBtn]}
+                                onPress={openWA}
+                                activeOpacity={0.7}
+                              >
+                                <MessageCircle size={13} color={colors.onBrandTertiary} />
+                                <Text style={[styles.contactBtnTxt, styles.waTxt]}>WhatsApp</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        ) : (
+                          <Text style={styles.noContact}>Visit in-store (no direct line listed).</Text>
+                        )}
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
+
+                  <TouchableOpacity
+                    testID="pharm-suggest"
+                    style={styles.suggestBtn}
+                    onPress={() => router.push("/pharmacy-submit")}
+                    activeOpacity={0.7}
+                  >
+                    <Plus size={14} color={colors.brand} />
+                    <Text style={styles.suggestTxt}>Suggest a pharmacy or branch</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null}
               <View style={styles.disclaimer}>
                 <Text style={styles.disclaimerTxt}>
-                  Prices are typical retail estimates in ZMW and vary by branch and brand. Always confirm with the pharmacy. Government clinics may stock essential meds free of charge.
+                  Prices are typical retail estimates in ZMW and vary by branch and brand. Phone numbers may change — always confirm with the pharmacy. Government clinics may stock essential meds free of charge.
                 </Text>
               </View>
             </>

@@ -134,13 +134,14 @@ async def signup(input: SignupInput):
         "phone": phone,
         "name": (input.name or "").strip() or None,
         "passcode_hash": hash_passcode(input.passcode),
+        "role": "user",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user_doc)
     token = create_token(user_id)
     return AuthResponse(
         token=token,
-        user={"id": user_id, "phone": phone, "name": user_doc["name"]},
+        user={"id": user_id, "phone": phone, "name": user_doc["name"], "role": "user"},
     )
 
 
@@ -155,8 +156,14 @@ async def login(input: LoginInput):
     token = create_token(user["id"])
     return AuthResponse(
         token=token,
-        user={"id": user["id"], "phone": user["phone"], "name": user.get("name")},
+        user={"id": user["id"], "phone": user["phone"], "name": user.get("name"), "role": user.get("role", "user")},
     )
+
+
+async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
 
 
 @api_router.get("/auth/me")
@@ -1136,17 +1143,32 @@ PHARMACY_ITEMS = [
     {"id": "sharps-bin", "name": "Sharps disposal bin (small)", "category": "testing", "subcategory": "injection", "pack": "1 bin", "price_low": 60, "price_high": 150, "note": "Safe disposal of needles/lancets.", "available_at": ["Pharmanova", "Link Pharmacy"]},
 ]
 
-ZAMBIA_PHARMACIES = [
-    {"name": "Pharmanova", "note": "Nationwide chain. Branches in Lusaka, Ndola, Kitwe, Livingstone."},
-    {"name": "Link Pharmacy", "note": "Nationwide chain with 24-hour branches in Lusaka."},
-    {"name": "Health Plus Pharmacy", "note": "Lusaka and Copperbelt branches."},
-    {"name": "Shoprite Pharmacy", "note": "In-store pharmacies at Shoprite outlets."},
-    {"name": "MedPlus Pharmacy", "note": "Lusaka branches, competitive prices."},
-    {"name": "CashPlus Pharmacy", "note": "Budget-friendly outlets in Lusaka."},
-    {"name": "UTH Pharmacy", "note": "University Teaching Hospital — subsidized for inpatients."},
-    {"name": "Government clinics", "note": "Essential meds often free at MoH clinics (availability varies)."},
-    {"name": "ZDA Clinic Pharmacy", "note": "Zambia Diabetes Association — diabetes-focused supplies."},
+ZAMBIA_PHARMACIES_SEED = [
+    {"name": "Pharmanova", "note": "Nationwide chain. Branches in Lusaka, Ndola, Kitwe, Livingstone.", "phone": "+260211254022", "whatsapp": "+260971254022"},
+    {"name": "Link Pharmacy", "note": "Nationwide chain with 24-hour branches in Lusaka.", "phone": "+260211253331", "whatsapp": "+260977791791"},
+    {"name": "Health Plus Pharmacy", "note": "Lusaka and Copperbelt branches.", "phone": "+260211844001", "whatsapp": None},
+    {"name": "Shoprite Pharmacy", "note": "In-store pharmacies at Shoprite outlets.", "phone": None, "whatsapp": None},
+    {"name": "MedPlus Pharmacy", "note": "Lusaka branches, competitive prices.", "phone": "+260211846580", "whatsapp": None},
+    {"name": "CashPlus Pharmacy", "note": "Budget-friendly outlets in Lusaka.", "phone": None, "whatsapp": None},
+    {"name": "UTH Pharmacy", "note": "University Teaching Hospital — subsidized for inpatients.", "phone": "+260211254421", "whatsapp": None},
+    {"name": "Government clinics", "note": "Essential meds often free at MoH clinics (availability varies).", "phone": "991", "whatsapp": None},
+    {"name": "ZDA Clinic Pharmacy", "note": "Zambia Diabetes Association — diabetes-focused supplies.", "phone": "+260211237575", "whatsapp": "+260977237575"},
 ]
+
+
+class PharmacySubmitIn(BaseModel):
+    name: str
+    note: Optional[str] = ""
+    phone: Optional[str] = None
+    whatsapp: Optional[str] = None
+    branch: Optional[str] = None  # branch name/location if specific branch
+
+
+class PharmacyAdminIn(BaseModel):
+    name: str
+    note: Optional[str] = ""
+    phone: Optional[str] = None
+    whatsapp: Optional[str] = None
 
 
 @api_router.get("/pharmacy/items")
@@ -1162,7 +1184,170 @@ async def pharmacy_items(category: Optional[str] = None, q: Optional[str] = None
 
 @api_router.get("/pharmacy/stockists")
 async def pharmacy_stockists():
-    return ZAMBIA_PHARMACIES
+    """Return approved pharmacies with contact details."""
+    cursor = db.pharmacies.find(
+        {"status": "approved"},
+        {"_id": 0, "submitted_by": 0, "admin_note": 0},
+    ).sort("created_at", 1)
+    return await cursor.to_list(length=200)
+
+
+@api_router.post("/pharmacy/submit")
+async def pharmacy_submit(input: PharmacySubmitIn, current_user: dict = Depends(get_current_user)):
+    """Any logged-in user can suggest a pharmacy / branch. Awaits admin approval."""
+    name = (input.name or "").strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Pharmacy name is required")
+    phone = (input.phone or "").strip() or None
+    whatsapp = (input.whatsapp or "").strip() or None
+    if not phone and not whatsapp:
+        raise HTTPException(status_code=400, detail="Add at least a phone number or WhatsApp number")
+
+    note = (input.note or "").strip()
+    branch = (input.branch or "").strip()
+    if branch:
+        note = f"Branch: {branch}" + (f" — {note}" if note else "")
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "note": note,
+        "phone": phone,
+        "whatsapp": whatsapp,
+        "status": "pending",
+        "source": "user",
+        "submitted_by": current_user["id"],
+        "submitter_phone": current_user.get("phone"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.pharmacy_submissions.insert_one(doc)
+    return {"ok": True, "id": doc["id"], "status": "pending"}
+
+
+@api_router.get("/pharmacy/submissions/mine")
+async def my_submissions(current_user: dict = Depends(get_current_user)):
+    cursor = db.pharmacy_submissions.find(
+        {"submitted_by": current_user["id"]},
+        {"_id": 0, "submitted_by": 0, "submitter_phone": 0},
+    ).sort("created_at", -1)
+    return await cursor.to_list(length=100)
+
+
+# -------------------- Admin --------------------
+@api_router.get("/admin/stats")
+async def admin_stats(admin: dict = Depends(require_admin)):
+    users_count = await db.users.count_documents({"deleted_at": {"$exists": False}})
+    pharms_count = await db.pharmacies.count_documents({"status": "approved"})
+    pending_count = await db.pharmacy_submissions.count_documents({"status": "pending"})
+    readings_count = await db.glucose_readings.count_documents({"deleted_at": {"$exists": False}})
+    bp_count = await db.bp_readings.count_documents({"deleted_at": {"$exists": False}})
+    return {
+        "users": users_count,
+        "pharmacies": pharms_count,
+        "pending_submissions": pending_count,
+        "glucose_readings": readings_count,
+        "bp_readings": bp_count,
+    }
+
+
+@api_router.get("/admin/submissions")
+async def admin_list_submissions(status: str = "pending", admin: dict = Depends(require_admin)):
+    cursor = db.pharmacy_submissions.find(
+        {"status": status},
+        {"_id": 0},
+    ).sort("created_at", -1)
+    return await cursor.to_list(length=500)
+
+
+@api_router.post("/admin/submissions/{sid}/approve")
+async def admin_approve_submission(sid: str, admin: dict = Depends(require_admin)):
+    sub = await db.pharmacy_submissions.find_one({"id": sid, "status": "pending"})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Pending submission not found")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    pharm_doc = {
+        "id": str(uuid.uuid4()),
+        "name": sub["name"],
+        "note": sub.get("note", ""),
+        "phone": sub.get("phone"),
+        "whatsapp": sub.get("whatsapp"),
+        "status": "approved",
+        "source": "user",
+        "submitted_by": sub.get("submitted_by"),
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    await db.pharmacies.insert_one(pharm_doc)
+    await db.pharmacy_submissions.update_one(
+        {"id": sid},
+        {"$set": {"status": "approved", "approved_at": now_iso, "pharmacy_id": pharm_doc["id"]}},
+    )
+    return {"ok": True, "pharmacy_id": pharm_doc["id"]}
+
+
+@api_router.post("/admin/submissions/{sid}/reject")
+async def admin_reject_submission(sid: str, admin: dict = Depends(require_admin)):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    r = await db.pharmacy_submissions.update_one(
+        {"id": sid, "status": "pending"},
+        {"$set": {"status": "rejected", "rejected_at": now_iso}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Pending submission not found")
+    return {"ok": True}
+
+
+@api_router.get("/admin/pharmacies")
+async def admin_list_pharmacies(admin: dict = Depends(require_admin)):
+    cursor = db.pharmacies.find({}, {"_id": 0}).sort("name", 1)
+    return await cursor.to_list(length=500)
+
+
+@api_router.post("/admin/pharmacies")
+async def admin_add_pharmacy(input: PharmacyAdminIn, admin: dict = Depends(require_admin)):
+    name = (input.name or "").strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Name is required")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "note": (input.note or "").strip(),
+        "phone": (input.phone or "").strip() or None,
+        "whatsapp": (input.whatsapp or "").strip() or None,
+        "status": "approved",
+        "source": "admin",
+        "submitted_by": admin["id"],
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    await db.pharmacies.insert_one(doc)
+    return {"ok": True, "id": doc["id"]}
+
+
+@api_router.put("/admin/pharmacies/{pid}")
+async def admin_update_pharmacy(pid: str, input: PharmacyAdminIn, admin: dict = Depends(require_admin)):
+    update = {
+        "name": (input.name or "").strip(),
+        "note": (input.note or "").strip(),
+        "phone": (input.phone or "").strip() or None,
+        "whatsapp": (input.whatsapp or "").strip() or None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if len(update["name"]) < 2:
+        raise HTTPException(status_code=400, detail="Name is required")
+    r = await db.pharmacies.update_one({"id": pid}, {"$set": update})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Pharmacy not found")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/pharmacies/{pid}")
+async def admin_delete_pharmacy(pid: str, admin: dict = Depends(require_admin)):
+    r = await db.pharmacies.delete_one({"id": pid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Pharmacy not found")
+    return {"ok": True}
 
 
 # -------------------- Mount + CORS --------------------
@@ -1174,6 +1359,58 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def seed_defaults():
+    """Seed admin user and default pharmacies with contact info if DB is empty."""
+    try:
+        # Seed admin user
+        admin_phone = "+260000000000"
+        admin_passcode = "9999"
+        existing_admin = await db.users.find_one({"phone": admin_phone})
+        if not existing_admin:
+            admin_doc = {
+                "id": str(uuid.uuid4()),
+                "phone": admin_phone,
+                "name": "ZedPulse Admin",
+                "passcode_hash": hash_passcode(admin_passcode),
+                "role": "admin",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.users.insert_one(admin_doc)
+            logger.info("Seeded admin user %s", admin_phone)
+        else:
+            # Ensure role is admin
+            if existing_admin.get("role") != "admin":
+                await db.users.update_one({"phone": admin_phone}, {"$set": {"role": "admin"}})
+
+        # Backfill role for any existing user missing it
+        await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "user"}})
+
+        # Seed pharmacies (only if none exist)
+        existing_count = await db.pharmacies.count_documents({})
+        if existing_count == 0:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            docs = []
+            for p in ZAMBIA_PHARMACIES_SEED:
+                docs.append({
+                    "id": str(uuid.uuid4()),
+                    "name": p["name"],
+                    "note": p.get("note", ""),
+                    "phone": p.get("phone"),
+                    "whatsapp": p.get("whatsapp"),
+                    "status": "approved",
+                    "source": "seed",
+                    "submitted_by": None,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                })
+            if docs:
+                await db.pharmacies.insert_many(docs)
+                logger.info("Seeded %d default pharmacies", len(docs))
+    except Exception as e:
+        logger.exception("Seed defaults failed: %s", e)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

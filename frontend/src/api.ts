@@ -129,4 +129,25 @@ export const api = {
     return request<any[]>(`/pharmacy/items${qs ? `?${qs}` : ""}`);
   },
   pharmacyStockists: () => request<any[]>("/pharmacy/stockists"),
+
+  // Pharmacy submissions (any user)
+  submitPharmacy: (body: { name: string; phone?: string; whatsapp?: string; note?: string; branch?: string }) =>
+    request<{ ok: boolean; id: string; status: string }>("/pharmacy/submit", { method: "POST", body }),
+  mySubmissions: () => request<any[]>("/pharmacy/submissions/mine"),
+
+  // Admin
+  adminStats: () => request<any>("/admin/stats"),
+  adminSubmissions: (status: "pending" | "approved" | "rejected" = "pending") =>
+    request<any[]>(`/admin/submissions?status=${status}`),
+  adminApprove: (id: string) =>
+    request<any>(`/admin/submissions/${id}/approve`, { method: "POST" }),
+  adminReject: (id: string) =>
+    request<any>(`/admin/submissions/${id}/reject`, { method: "POST" }),
+  adminListPharmacies: () => request<any[]>("/admin/pharmacies"),
+  adminAddPharmacy: (body: { name: string; phone?: string; whatsapp?: string; note?: string }) =>
+    request<any>("/admin/pharmacies", { method: "POST", body }),
+  adminUpdatePharmacy: (id: string, body: { name: string; phone?: string; whatsapp?: string; note?: string }) =>
+    request<any>(`/admin/pharmacies/${id}`, { method: "PUT", body }),
+  adminDeletePharmacy: (id: string) =>
+    request<any>(`/admin/pharmacies/${id}`, { method: "DELETE" }),
 };

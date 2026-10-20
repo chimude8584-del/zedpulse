@@ -9,7 +9,17 @@ Private phone-passcode login (+260 default). Users log blood glucose (mmol/L) an
 - Frontend: Expo Router, React Query + persistQueryClient (AsyncStorage), lucide icons, react-native-svg, expo-notifications, expo-print, expo-sharing, expo-clipboard, expo-image-picker, expo-location, @react-native-community/netinfo
 - Theme: Sage botanical palette, light + dark
 
-## New in this iteration (v1.1 polish)
+## New in this iteration (v1.2 — Pharmacy contact + Admin)
+- **Tap-to-call & WhatsApp in Pharmacy watch**: Each pharmacy in "Where to buy" now shows Call 📞 and WhatsApp 💬 buttons that open the native dialer or wa.me chat. 9 Zambian pharmacies seeded with publicly-known head-office numbers; "numbers may change" disclaimer visible.
+- **Crowdsourced pharmacy directory**: Any logged-in user can tap "Suggest a pharmacy or branch" to submit a new branch (name, location, phone, WhatsApp, note) — submissions go into a pending queue for admin review. Users can view their own submission status (Pending/Approved/Rejected) on the submit screen.
+- **In-app admin dashboard** (`/admin`): Hidden Settings entry visible ONLY to users with `role=admin`. Three tabs:
+  - **Pending** — approve/reject user-submitted pharmacies (approve creates a live pharmacy row).
+  - **Pharmacies** — full CRUD: add, edit, delete any pharmacy's name/note/phone/WhatsApp.
+  - **Stats** — total users, approved pharmacies, pending submissions, total readings.
+- **Admin seeded automatically**: On backend startup, if admin user doesn't exist, it's created at `+260000000000 / 9999`. All existing users without a role field get `role=user` backfilled.
+- **Backend**: `role` added to users, `require_admin` dependency, 9 new endpoints (`/pharmacy/submit`, `/pharmacy/submissions/mine`, `/admin/stats`, `/admin/submissions`, `/admin/submissions/{id}/approve|reject`, `/admin/pharmacies` CRUD). Pharmacies now live in a MongoDB collection seeded from `ZAMBIA_PHARMACIES_SEED`.
+
+## New in previous iteration (v1.1 polish)
 - **Onboarding tour** (`/onboarding`): 4-slide pager shown after first signup — "Log in seconds", "See your trends", "Zambia-aware AI tips", "Share with your doctor". Skip or step through; "onboarded" flag stored in AsyncStorage so returning users go straight to the dashboard.
 - **Hypo rescue timer** (`src/components/hypo-rescue-card.tsx`): When glucose < 3.9 mmol/L is logged, a terracotta-bordered card appears with 15:00 countdown, context-appropriate rescue instructions (15 g for warning, 20 g for severe), "I had rescue carbs" tap-to-confirm, and "Recheck now" shortcut that resets the Log form. Timer rolls over to a success "Time to recheck" banner at 00:00.
 - **Theme preference** (System/Light/Dark): Three-chip toggle in Settings → Appearance. Persisted to AsyncStorage; applies instantly across all screens via a tiny subscription in `src/theme.ts`.
