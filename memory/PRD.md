@@ -9,7 +9,13 @@ Private phone-passcode login (+260 default). Users log blood glucose (mmol/L) an
 - Frontend: Expo Router, React Query + persistQueryClient (AsyncStorage), lucide icons, react-native-svg, expo-notifications, expo-print, expo-sharing, expo-clipboard, expo-image-picker, expo-location, @react-native-community/netinfo
 - Theme: Sage botanical palette, light + dark
 
-## New in this iteration (v1.2 — Pharmacy contact + Admin)
+## New in this iteration (v1.3 — Growth features)
+- **Daily Health Tip** on dashboard: Sage-green card with lightbulb icon showing a fresh Zambian-context health tip every day (63 tips total, rotates by day-of-year). Covers nutrition (nshima, kapenta, chibwabwa), BP, glucose, foot care, exercise, mental health, clinic & pharmacy advice. New endpoint `GET /api/tips/today` (public).
+- **Referral program ("Give 7 days, get 7 days")**: Each user gets a unique 6-char uppercase code at signup. New signup can enter a referral code → **both** users get 7 days of ZedPulse Pro (stackable for the inviter). "PRO" chip shown in dashboard header for Pro users. Full invite screen at `/referral` with code box, WhatsApp/SMS share, invite count stats, "How it works" guide. New endpoint `GET /api/referral/me`.
+- **Signup updates**: Optional "Referral code 🎁" field (auto-uppercases, max 6 chars). Signup response and login response now include `referral_code` and `pro_until`.
+- **Backfill**: On backend startup, legacy users (including admin) get a referral code backfilled automatically.
+
+## New in previous iteration (v1.2 — Pharmacy contact + Admin)
 - **Tap-to-call & WhatsApp in Pharmacy watch**: Each pharmacy in "Where to buy" now shows Call 📞 and WhatsApp 💬 buttons that open the native dialer or wa.me chat. 9 Zambian pharmacies seeded with publicly-known head-office numbers; "numbers may change" disclaimer visible.
 - **Crowdsourced pharmacy directory**: Any logged-in user can tap "Suggest a pharmacy or branch" to submit a new branch (name, location, phone, WhatsApp, note) — submissions go into a pending queue for admin review. Users can view their own submission status (Pending/Approved/Rejected) on the submit screen.
 - **In-app admin dashboard** (`/admin`): Hidden Settings entry visible ONLY to users with `role=admin`. Three tabs:

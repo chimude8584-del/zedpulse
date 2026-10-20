@@ -49,8 +49,8 @@ async function request<T>(
 // Auth
 export type AuthResp = { token: string; user: { id: string; phone: string; name?: string | null } };
 export const api = {
-  signup: (phone: string, passcode: string, name?: string) =>
-    request<AuthResp>("/auth/signup", { method: "POST", body: { phone, passcode, name }, auth: false }),
+  signup: (phone: string, passcode: string, name?: string, referral_code?: string) =>
+    request<AuthResp>("/auth/signup", { method: "POST", body: { phone, passcode, name, referral_code }, auth: false }),
   login: (phone: string, passcode: string) =>
     request<AuthResp>("/auth/login", { method: "POST", body: { phone, passcode }, auth: false }),
   me: () => request<any>("/auth/me"),
@@ -150,4 +150,10 @@ export const api = {
     request<any>(`/admin/pharmacies/${id}`, { method: "PUT", body }),
   adminDeletePharmacy: (id: string) =>
     request<any>(`/admin/pharmacies/${id}`, { method: "DELETE" }),
+
+  // Tips
+  tipToday: () => request<any>("/tips/today", { auth: false }),
+
+  // Referral
+  myReferral: () => request<{ code: string; pro_until: string | null; is_pro: boolean; invites_count: number; share_text: string }>("/referral/me"),
 };

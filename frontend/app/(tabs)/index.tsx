@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndic
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle, Store } from "lucide-react-native";
+import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle, Store, Lightbulb } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
@@ -77,6 +77,24 @@ const useStyles = makeStyles((c) => ({
   },
   waAlertBtnTxt: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
   alertLink: { marginTop: spacing.sm, color: c.error, fontSize: 13, fontWeight: "600" },
+  tipCard: {
+    flexDirection: "row", gap: spacing.md, padding: spacing.lg,
+    borderRadius: radius.lg, backgroundColor: c.brandSecondary,
+    borderWidth: 1, borderColor: c.brand,
+  },
+  tipIconWrap: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: c.brand,
+    alignItems: "center", justifyContent: "center",
+  },
+  tipLabel: { fontSize: 10, fontWeight: "800", color: c.onBrandSecondary, letterSpacing: 1, opacity: 0.7, textTransform: "uppercase" },
+  tipTitle: { fontSize: 15, fontWeight: "700", color: c.onBrandSecondary, marginTop: 2 },
+  tipBody: { fontSize: 13, color: c.onBrandSecondary, marginTop: 4, lineHeight: 18, opacity: 0.9 },
+  proChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill,
+    backgroundColor: c.brand,
+  },
+  proTxt: { fontSize: 12, color: c.onBrand, fontWeight: "800", letterSpacing: 0.5 },
 }));
 
 export default function Dashboard() {
@@ -92,6 +110,7 @@ export default function Dashboard() {
     queryFn: () => api.summary(),
   });
   const { data: contact } = useQuery({ queryKey: ["emergency-contact"], queryFn: () => api.getEmergencyContact() });
+  const { data: tip } = useQuery({ queryKey: ["tip-today"], queryFn: () => api.tipToday(), staleTime: 1000 * 60 * 60 });
 
   const onRefresh = useCallback(() => {
     refetch();
@@ -117,6 +136,12 @@ export default function Dashboard() {
           </Text>
         </View>
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          {user?.pro_until && new Date(user.pro_until) > new Date() ? (
+            <View style={styles.proChip} testID="pro-chip">
+              <CheckCircle2 size={12} color={colors.onBrand} />
+              <Text style={styles.proTxt}>PRO</Text>
+            </View>
+          ) : null}
           {data?.streak_days ? (
             <View style={styles.streakChip} testID="streak-chip">
               <Flame size={14} color={colors.warning} />
@@ -139,6 +164,19 @@ export default function Dashboard() {
       >
         {isLoading ? (
           <ActivityIndicator color={colors.brand} />
+        ) : null}
+
+        {tip ? (
+          <View style={styles.tipCard} testID="daily-tip">
+            <View style={styles.tipIconWrap}>
+              <Lightbulb size={18} color={colors.onBrand} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tipLabel}>Today's tip · Zambia 🇿🇲</Text>
+              <Text style={styles.tipTitle}>{tip.title}</Text>
+              <Text style={styles.tipBody}>{tip.body}</Text>
+            </View>
+          </View>
         ) : null}
 
         {criticalAlerts.map((r: any, i: number) => (

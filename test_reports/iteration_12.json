@@ -1,0 +1,37 @@
+{
+  "summary": "Comprehensive backend + mobile UI testing of ZedPulse growth features: (1) Daily Zambian health tip card and (2) 6-char referral code + 7-day Pro program. All 8 backend pytest cases pass (100%): /api/tips/today returns correct shape (id/category/title/body/date/index/total=63), index deterministic across repeated calls; signup now returns referral_code (6 upper-case) + role=user + pro_until null by default; signup with valid inviter code grants both parties 7 days of pro_until (stackable for inviter, invites_count incremented); invalid referral code still creates user without pro bonus; login response includes referral_code + pro_until; seeded admin (+260000000000) has backfilled referral_code and /referral/me returns valid 6-char code + share_text containing both the code and 'ZedPulse Pro'; /referral/me requires auth (401 without token). Mobile UI (390x844) verified end-to-end: dashboard shows 'TODAY'S TIP · ZAMBIA 🇈🇲' card above glucose card with lightbulb icon, title and body from live API (testID='daily-tip'); PRO chip NOT shown for non-pro test user; after signup with inviter code (lowercase typed, auto-uppercased, maxLength=6 enforced) the new user's dashboard header shows green 'PRO' chip (testID='pro-chip') and /referral screen renders Pro banner (testID='ref-pro-banner') with 'Active until 27 Oct 2026' (+7 days); referral screen shows dashed code box (RPBLS2), 'Share on WhatsApp' + 'Share via SMS' buttons, 3-step 'How it works' card and friends/days stats; Settings has 'Invite friends · get 7 days Pro' entry (testID='settings-referral') that navigates to /referral. Regression: existing seeded user +15550001234 logs in cleanly, dashboard renders without errors. React Native warning 'props.pointerEvents is deprecated' still fires (same as iteration 11, non-blocking, upstream origin).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "pointerEvents (upstream / dependency)", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Fires on auth/login render. Still present from iteration 11; main agent should grep frontend for `pointerEvents=` and migrate to style.pointerEvents."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_12_growth.py",
+    "/app/test_reports/pytest/pytest_growth.xml"
+  ],
+  "action_items": [
+    "Minor: Migrate any `pointerEvents` prop usage to `style={{ pointerEvents: ... }}` (same as iteration 11 action item).",
+    "Nice-to-have: /api/tips/today could return a `theme_color` or `category_icon` so the tip card can colour-code categories (nutrition vs bp vs glucose). Not required."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py has grown further (now ~1600+ lines); growth features add ZAMBIA_TIPS array (~95 lines) + referral logic inline — a future refactor should extract tips.py and referral.py routers.",
+    "/api/referral/me performs an on-the-fly backfill (lines ~237-245) if a user has no referral_code; this is correct safety-net but redundant now that the startup hook also backfills — fine to keep as belt-and-braces.",
+    "Signup's inviter reward uses `max(current_dt, now) + 7d`. current_iso datetime.fromisoformat on an aware ISO string yields an aware datetime; comparison with `now` (aware) works, but on legacy records with naive strings an exception would be caught by the except branch (resets to now). Low risk, worth adding a unit test if growth increases.",
+    "Referral code generation uses `random.choices(ascii_uppercase + digits, k=6)` — not cryptographically random. Fine for a 6-char public share code since uniqueness is checked, but mention in docs it is not a secret.",
+    "The dashboard code checks `new Date(user.pro_until) > new Date()` client-side; this is fine but note timezone-sensitive edge case where backend's ISO (UTC) is compared with the browser's local time (JS Date auto-adjusts). Behaviour is correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_12_growth.py (new)",
+    "/app/test_reports/iteration_12.json (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all critical flows verified end-to-end incl. referral chain)"},
+  "seed_data_creation": "Backend startup hook auto-seeds admin + backfills referral_code for existing users (incl. admin and +15550001234). Tests create fresh signup accounts with time-based unique phones (e.g. +260771xxxxx) — these persist in the DB but are harmless. No cleanup needed since each run uses unique phones.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Growth features (daily tips + referral) are production-ready. Backend coverage: /app/backend/tests/test_12_growth.py. The referral code shown in dashboard header for a Pro user is a green 'PRO' chip (testID='pro-chip'). Referral screen is at /referral with testIDs: ref-code, ref-copy, ref-share-wa, ref-share-sms, ref-invites, ref-pro-banner, ref-back. Signup form adds a 6-char referral input (testID='signup-referral-input') visible only in signup mode (not login). Admin creds: +260000000000/9999. Regular test user: +15550001234/1234. ZAMBIA_TIPS has 63 entries rotated by day-of-year modulo len.",
+  "rca_of_issue": "No bugs found. All asserted business logic (tip rotation, 6-char code generation, mutual +7d pro, stackable inviter bonus, invites_count increment, backfill, auth-gated /referral/me) behaves per spec. Only outstanding note is the pre-existing non-blocking `pointerEvents` deprecation warning (iteration 11)."
+}

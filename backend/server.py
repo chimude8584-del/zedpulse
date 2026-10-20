@@ -37,6 +37,7 @@ class SignupInput(BaseModel):
     phone: str
     passcode: str
     name: Optional[str] = None
+    referral_code: Optional[str] = None
 
 
 class LoginInput(BaseModel):
@@ -129,19 +130,59 @@ async def signup(input: SignupInput):
         raise HTTPException(status_code=400, detail="Phone already registered")
 
     user_id = str(uuid.uuid4())
+    # Generate unique 6-char referral code
+    import random, string
+    def _gen_code():
+        return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    for _ in range(10):
+        code = _gen_code()
+        if not await db.users.find_one({"referral_code": code}):
+            break
+
+    # Process incoming referral code (if any)
+    pro_until = None
+    referred_by = None
+    inviter_user = None
+    incoming = (input.referral_code or "").strip().upper()
+    if incoming:
+        inviter_user = await db.users.find_one({"referral_code": incoming, "deleted_at": {"$exists": False}})
+        if inviter_user:
+            referred_by = inviter_user["id"]
+            # Give new user 7 days of pro
+            pro_until = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+
     user_doc = {
         "id": user_id,
         "phone": phone,
         "name": (input.name or "").strip() or None,
         "passcode_hash": hash_passcode(input.passcode),
         "role": "user",
+        "referral_code": code,
+        "referred_by": referred_by,
+        "pro_until": pro_until,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user_doc)
+
+    # Reward inviter (stackable): add 7 days to their pro_until (from the later of now or current pro_until)
+    if inviter_user:
+        now = datetime.now(timezone.utc)
+        current_iso = inviter_user.get("pro_until")
+        try:
+            current_dt = datetime.fromisoformat(current_iso) if current_iso else now
+        except Exception:
+            current_dt = now
+        start = max(current_dt, now)
+        new_pro = (start + timedelta(days=7)).isoformat()
+        await db.users.update_one(
+            {"id": inviter_user["id"]},
+            {"$set": {"pro_until": new_pro}, "$inc": {"invites_count": 1}},
+        )
+
     token = create_token(user_id)
     return AuthResponse(
         token=token,
-        user={"id": user_id, "phone": phone, "name": user_doc["name"], "role": "user"},
+        user={"id": user_id, "phone": phone, "name": user_doc["name"], "role": "user", "referral_code": code, "pro_until": pro_until},
     )
 
 
@@ -156,7 +197,14 @@ async def login(input: LoginInput):
     token = create_token(user["id"])
     return AuthResponse(
         token=token,
-        user={"id": user["id"], "phone": user["phone"], "name": user.get("name"), "role": user.get("role", "user")},
+        user={
+            "id": user["id"],
+            "phone": user["phone"],
+            "name": user.get("name"),
+            "role": user.get("role", "user"),
+            "referral_code": user.get("referral_code"),
+            "pro_until": user.get("pro_until"),
+        },
     )
 
 
@@ -164,6 +212,166 @@ async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
+
+
+# -------------------- Referral --------------------
+@api_router.get("/referral/me")
+async def my_referral(current_user: dict = Depends(get_current_user)):
+    # Refetch user to get latest fields (invites_count, pro_until)
+    user = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "passcode_hash": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    now = datetime.now(timezone.utc)
+    is_pro = False
+    pro_until_iso = user.get("pro_until")
+    if pro_until_iso:
+        try:
+            is_pro = datetime.fromisoformat(pro_until_iso) > now
+        except Exception:
+            is_pro = False
+
+    invites_count = int(user.get("invites_count", 0))
+
+    code = user.get("referral_code")
+    if not code:
+        # Backfill for older users
+        import random, string
+        for _ in range(10):
+            c = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            if not await db.users.find_one({"referral_code": c}):
+                code = c
+                break
+        await db.users.update_one({"id": user["id"]}, {"$set": {"referral_code": code}})
+
+    share_text = (
+        f"Hey! I'm using ZedPulse to track my blood sugar & BP in Zambia 🇿🇲. "
+        f"Download it and use my code *{code}* when you sign up — we both get 7 days of ZedPulse Pro free. "
+        f"Grab it here: https://zedpulse.app"
+    )
+    return {
+        "code": code,
+        "pro_until": pro_until_iso,
+        "is_pro": is_pro,
+        "invites_count": invites_count,
+        "share_text": share_text,
+    }
+
+
+# -------------------- Daily tips --------------------
+ZAMBIA_TIPS = [
+    # Nutrition — nshima & staples
+    {"category": "nutrition", "title": "Nshima & portion control", "body": "Half a cup of cooked nshima raises blood sugar as much as 2 slices of bread. Pair it with vegetables (rape, cabbage, pumpkin leaves) and a palm-sized protein (kapenta, chicken, beans) to blunt the spike."},
+    {"category": "nutrition", "title": "Choose brown mealie meal when you can", "body": "Breakfast or super-sifted mealie meal spikes sugar faster than roller/brown mealie meal. If brown isn't available, keep the portion smaller and add relish."},
+    {"category": "nutrition", "title": "Kapenta is a smart protein", "body": "Dried kapenta is cheap, low in carbs, and rich in calcium and omega-3s. Good for heart & diabetes. Rinse well to cut salt."},
+    {"category": "nutrition", "title": "Watch out for sweet drinks", "body": "A single 500ml Coke or Fanta has about 55g of sugar — more than 2 scoops of nshima's worth of carbs. Switch to water, lemon water, or sugar-free Munati."},
+    {"category": "nutrition", "title": "Chibwabwa (pumpkin leaves) are a free superfood", "body": "Pumpkin leaves cook fast, are high in fibre & iron, and keep blood sugar steady. Add groundnuts for taste without sugar."},
+    {"category": "nutrition", "title": "Mangoes in season? Still a diabetic friend", "body": "One small mango = ~15g carbs (like a slice of bread). Enjoy it, but skip the sugar on top and don't pair with nshima at the same meal."},
+    {"category": "nutrition", "title": "Groundnuts: a handful, not a bowl", "body": "Groundnuts are healthy but calorie-dense. A small handful (30g) is a smart snack. A full bowl can derail your weight and BP."},
+    {"category": "nutrition", "title": "Beans > rice for diabetes", "body": "Beans release sugar slowly. Swap half your rice for beans and your post-meal glucose will likely drop by 1-2 mmol/L."},
+    {"category": "nutrition", "title": "Fried fritters are a glucose trap", "body": "Vitumbuwa and samosas spike sugar fast and feed BP. Save them for special days, not daily tea breaks."},
+    {"category": "nutrition", "title": "Munkoyo & maheu — ask about sugar", "body": "Fermented drinks are good gut food, but sweetened versions can push glucose up. Choose unsweetened or dilute with water."},
+
+    # Nutrition — fruits/veg
+    {"category": "nutrition", "title": "Guavas before sunset", "body": "Local guavas are high in fibre and vitamin C and low on the glycemic index. One a day is a good diabetic snack."},
+    {"category": "nutrition", "title": "Avocado: a BP friend", "body": "Half an avocado contains potassium which helps balance sodium and lower BP. Great on nshima instead of butter or margarine."},
+    {"category": "nutrition", "title": "Rape, chinese cabbage, chibwabwa", "body": "Leafy greens are nearly free of carbs. Fill half your plate — your sugar and BP will thank you."},
+    {"category": "nutrition", "title": "Watermelon in moderation", "body": "Watermelon is mostly water but spikes glucose quickly. Stick to 1 small slice and skip the salt sprinkle."},
+
+    # BP tips
+    {"category": "bp", "title": "Shake fewer salt crystals", "body": "Most Zambians get too much salt from stock cubes, dried fish, and chips. Try half a Royco cube next time — your BP will drop within weeks."},
+    {"category": "bp", "title": "Measure BP at the same time daily", "body": "Morning before breakfast is best. Sit 5 minutes, feet flat, arm at heart level. One reading is a snapshot — the trend is the truth."},
+    {"category": "bp", "title": "Walk briskly 30 minutes a day", "body": "A 30-minute brisk walk (even in two 15-min bouts) lowers systolic BP by about 5-8 mmHg. Lusaka or Ndola streets at 06:00 are perfect — cool and calm."},
+    {"category": "bp", "title": "Alcohol & BP: honest numbers", "body": "More than 2 drinks a day lifts BP noticeably. If you can't skip, cap it at 1 beer or 1 shot — your medication works better."},
+    {"category": "bp", "title": "Dried fish is salty — rinse it", "body": "Rinsing kapenta or dried bream before cooking cuts the salt by about a third without losing flavour."},
+    {"category": "bp", "title": "Smoking + hypertension = double trouble", "body": "Smoking stiffens arteries. Quitting is the single biggest BP win. Clinics at Levy or Lusaka Trust can help with cessation."},
+
+    # Glucose management
+    {"category": "glucose", "title": "Test before breakfast once a week", "body": "A weekly fasting glucose check builds a reliable picture. Aim for 4.0 – 7.0 mmol/L for most people."},
+    {"category": "glucose", "title": "Carry hypo rescue carbs", "body": "Keep 3 glucose tablets or a small juice box in your bag. If you feel shaky or sweaty and read below 3.9 mmol/L, take 15g right away."},
+    {"category": "glucose", "title": "Exercise lowers sugar for 24+ hours", "body": "Even gardening or walking from Soweto Market to the Intercity station can keep your glucose steadier until the next day."},
+    {"category": "glucose", "title": "The 15-15 hypo rule", "body": "If low: 15g fast carbs, wait 15 minutes, recheck. Repeat if still low. Don't over-correct with a whole chocolate bar."},
+    {"category": "glucose", "title": "After-meal walk = better numbers", "body": "A 10-minute stroll after nshima cuts your post-meal spike by up to 30%. Walk around the plot while catching up with family."},
+    {"category": "glucose", "title": "Insulin storage in a Zambian climate", "body": "Keep insulin in the fridge (not freezer). While using, it keeps at room temp for 28 days — out of direct sun. Travel with it in a cloth bag, not a hot car boot."},
+    {"category": "glucose", "title": "Dawn phenomenon is normal", "body": "Many people wake up with glucose a bit higher than at bedtime. If it's regularly above 10 mmol/L fasting, talk to your clinician — your meds may need tweaking."},
+
+    # Foot care
+    {"category": "foot_care", "title": "Check your feet every evening", "body": "Diabetes dulls feeling. A small cut can grow into a bad wound unnoticed. Look between toes with a torch each night."},
+    {"category": "foot_care", "title": "Never walk barefoot outside", "body": "Rainy season + barefoot = infection risk. Wear closed shoes even in the yard. Rinse and dry feet after walks."},
+    {"category": "foot_care", "title": "Trim toenails straight across", "body": "Rounded corners cause ingrown nails that get infected quickly. If you can't see your feet well, ask a family member or clinic."},
+    {"category": "foot_care", "title": "Moisturise but not between toes", "body": "Petroleum jelly or Vaseline keeps skin from cracking. Avoid between toes to prevent fungal infection."},
+
+    # Exercise & lifestyle
+    {"category": "exercise", "title": "Zambian 'power walk' at dawn", "body": "The coolest, safest window to exercise in Lusaka or Kitwe is 05:30–07:00. Just 20 minutes most days improves BP, glucose, and sleep."},
+    {"category": "exercise", "title": "Try resistance 2x a week", "body": "Press-ups, sit-ups, and jerry-can lifts build muscle, which pulls glucose out of your blood. No gym needed."},
+    {"category": "exercise", "title": "Dance to lower sugar", "body": "30 minutes of Zambian rumba or kwela is a real workout — fun, free, and your pancreas appreciates it."},
+    {"category": "exercise", "title": "Standing beats sitting", "body": "Every hour, stand up and walk for 2 minutes. Office workers in Lusaka who do this see 10-15% better after-lunch sugar."},
+
+    # Mental health & sleep
+    {"category": "mental", "title": "Sleep is medicine", "body": "Less than 6 hours of sleep raises both BP and blood sugar. Aim for 7-8 hours and a dark, cool bedroom."},
+    {"category": "mental", "title": "Stress spikes glucose", "body": "A tough day at work or Kabwata market can push your sugar up without eating. Try 4-7-8 breathing: inhale 4, hold 7, exhale 8."},
+    {"category": "mental", "title": "Talk about it", "body": "Diabetes + BP together can feel heavy. Chat with family, your church group, or ZDA. Mental health is part of control."},
+
+    # Clinic & care
+    {"category": "clinic", "title": "HbA1c every 3-6 months", "body": "Ask your clinic for an HbA1c blood test twice a year. It's your long-term glucose average — aim for below 7% most of the time."},
+    {"category": "clinic", "title": "Eye check once a year", "body": "Diabetes can quietly damage the retina. Levy Mwanawasa and UTH have eye clinics; book a yearly review."},
+    {"category": "clinic", "title": "Kidney check matters", "body": "A simple urine test (ACR) once a year catches kidney issues early. Treating early can save your kidneys."},
+    {"category": "clinic", "title": "Carry a diabetes ID", "body": "A small card in your wallet saying 'I have diabetes' + emergency contact helps strangers help you if you faint."},
+    {"category": "clinic", "title": "BP cuff size matters", "body": "A too-small cuff reads BP falsely high. Ask the nurse if the cuff fits comfortably around your upper arm."},
+
+    # Pharmacy & meds
+    {"category": "pharmacy", "title": "Metformin with food, not before", "body": "Taking metformin on an empty stomach causes nausea. Swallow it mid-meal and the side effects usually fade in a week or two."},
+    {"category": "pharmacy", "title": "Don't skip BP meds on good days", "body": "BP is a silent condition. Stopping meds because 'you feel fine' is the #1 cause of strokes in Zambia. Keep taking them."},
+    {"category": "pharmacy", "title": "Compare prices before you buy", "body": "Pharmanova, Link, Health Plus and MedPlus can differ by 30% on the same medicine. Check the Pharmacy watch tab before heading out."},
+    {"category": "pharmacy", "title": "Expiry dates on test strips", "body": "Glucose strips lose accuracy months before expiry. Open the pot date and use within 6 months for best results."},
+    {"category": "pharmacy", "title": "Pill boxes save lives", "body": "A 7-day pill box (K20-K50 at Pharmanova) stops missed doses. Fill it every Sunday evening and keep it near your toothbrush."},
+    {"category": "pharmacy", "title": "Government clinics may stock meds free", "body": "Metformin, enalapril and amlodipine are often free at MoH clinics (availability varies). It's worth asking before paying retail."},
+
+    # Hydration
+    {"category": "nutrition", "title": "Drink water before you feel thirsty", "body": "By the time your mouth is dry, you're already 2% dehydrated — which raises BP and makes glucose readings less accurate."},
+    {"category": "nutrition", "title": "Munkoyo, chibwantu, water — rank them", "body": "Water first, then unsweetened fermented drinks, then juice. Avoid sweetened soft drinks except for hypo rescue."},
+
+    # Family / community
+    {"category": "mental", "title": "Teach your family hypo signs", "body": "Shaky, sweaty, confused, slurred speech — these could be low sugar. Teach your spouse or child to grab juice or glucose tablets and call for help."},
+    {"category": "clinic", "title": "ZDA peer groups help", "body": "The Zambia Diabetes Association runs support meet-ups in Lusaka and Copperbelt — a great place to swap meal ideas and tips."},
+
+    # Weight
+    {"category": "exercise", "title": "A 5kg loss = big BP drop", "body": "Even losing 5kg can cut systolic BP by 5-10 mmHg and improve glucose. Small, slow changes add up over 6 months."},
+
+    # Seasons
+    {"category": "clinic", "title": "Cold mornings raise BP", "body": "July and August cold snaps can push BP up. Dress warmly and check readings in the morning — adjust meds only with your clinician."},
+    {"category": "clinic", "title": "Rainy season = mosquitoes & missed meds", "body": "Travelling during the rains? Pack 2 extra weeks of meds in a waterproof bag."},
+
+    # Social cues
+    {"category": "nutrition", "title": "Funerals & weddings — plan ahead", "body": "Big events often mean lots of food. Eat half a plate, lots of greens, and skip the second helping. One day of excess won't ruin you, but every weekend will."},
+    {"category": "nutrition", "title": "Tea with less sugar, slowly", "body": "Cut sugar by half a teaspoon a week. In 2 months your tea tastes natural with zero and your sugar readings drop."},
+    {"category": "nutrition", "title": "Breakfast matters most", "body": "Skipping breakfast makes blood sugar swing wildly later. Try porridge with groundnuts & a small fruit — steady fuel until lunch."},
+
+    # BP & meds timing
+    {"category": "bp", "title": "Pick a BP meds time and stick to it", "body": "Taking your BP tablet at the same time daily (e.g., with morning tea) builds a habit. Consistent timing = consistent BP."},
+    {"category": "bp", "title": "Stand up slowly from bed", "body": "If your BP meds make you light-headed in the morning, sit on the edge of the bed for 30 seconds first. Prevents falls."},
+
+    # Final general ones
+    {"category": "glucose", "title": "Log it to see it", "body": "Readings you don't log tell you nothing. Even on 'bad' days, log — patterns need data."},
+    {"category": "mental", "title": "Celebrate the small wins", "body": "A week of in-range sugars or a kilo lost — tell someone, note it in the app. Progress fuels progress."},
+]
+
+
+@api_router.get("/tips/today")
+async def tip_today():
+    """Return today's rotating Zambian health tip (seeded, day-of-year based)."""
+    if not ZAMBIA_TIPS:
+        raise HTTPException(status_code=500, detail="No tips configured")
+    today = datetime.now(timezone.utc).date()
+    # Deterministic rotation across the pool
+    idx = today.toordinal() % len(ZAMBIA_TIPS)
+    tip = dict(ZAMBIA_TIPS[idx])
+    tip["id"] = f"{today.isoformat()}-{idx}"
+    tip["date"] = today.isoformat()
+    tip["total"] = len(ZAMBIA_TIPS)
+    tip["index"] = idx
+    return tip
+
 
 
 @api_router.get("/auth/me")
@@ -1386,6 +1594,16 @@ async def seed_defaults():
 
         # Backfill role for any existing user missing it
         await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "user"}})
+
+        # Backfill referral_code for any existing user missing it
+        import random, string
+        missing_users = db.users.find({"referral_code": {"$exists": False}, "deleted_at": {"$exists": False}})
+        async for mu in missing_users:
+            for _ in range(10):
+                c = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                if not await db.users.find_one({"referral_code": c}):
+                    await db.users.update_one({"id": mu["id"]}, {"$set": {"referral_code": c, "invites_count": 0}})
+                    break
 
         # Seed pharmacies (only if none exist)
         existing_count = await db.pharmacies.count_documents({})

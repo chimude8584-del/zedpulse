@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2, Shield } from "lucide-react-native";
+import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2, Shield, Gift } from "lucide-react-native";
 
 import { api, clearToken } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius, setThemePref, type ThemePref } from "@/src/theme";
@@ -105,6 +105,11 @@ export default function Settings() {
         <TouchableOpacity testID="settings-reminders" style={styles.item} onPress={() => router.push("/reminders")}>
           <Bell size={18} color={colors.brand} />
           <Text style={styles.itemTxt}>Reminders</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="settings-referral" style={[styles.item, { borderColor: colors.brand }]} onPress={() => router.push("/referral")}>
+          <Gift size={18} color={colors.brand} />
+          <Text style={[styles.itemTxt, { color: colors.brand, fontWeight: "700" }]}>Invite friends · get 7 days Pro</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-medications" style={styles.item} onPress={() => router.push("/medications")}>

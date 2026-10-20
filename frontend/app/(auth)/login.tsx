@@ -54,6 +54,7 @@ export default function Login() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("+260 ");
   const [passcode, setPasscode] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +72,7 @@ export default function Login() {
     try {
       const resp = mode === "login"
         ? await api.login(phone, passcode)
-        : await api.signup(phone, passcode, name);
+        : await api.signup(phone, passcode, name, referralCode.trim().toUpperCase() || undefined);
       await setToken(resp.token);
       if (mode === "signup") {
         await storage.setItem(ONBOARDED_KEY, "");
@@ -154,6 +155,22 @@ export default function Login() {
           secureTextEntry
           maxLength={8}
         />
+
+        {mode === "signup" && (
+          <>
+            <Text style={styles.label}>Referral code (optional) 🎁</Text>
+            <TextInput
+              testID="signup-referral-input"
+              style={styles.input}
+              value={referralCode}
+              onChangeText={(t) => setReferralCode(t.toUpperCase())}
+              placeholder="e.g. ABC123 — both get 7 days Pro free"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="characters"
+              maxLength={6}
+            />
+          </>
+        )}
 
         {error ? <Text testID="auth-error" style={styles.error}>{error}</Text> : null}
 
