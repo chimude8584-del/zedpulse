@@ -3,10 +3,11 @@ import { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2, Shield, Gift } from "lucide-react-native";
+import { ArrowLeft, LogOut, FileText, HeartPulse, Bell, Pill, Link2, Users, Utensils, Hospital, TrendingUp, Store, Sun, Moon, Monitor, Trash2, Shield, Gift, HeartHandshake } from "lucide-react-native";
 
 import { api, clearToken } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius, setThemePref, type ThemePref } from "@/src/theme";
+import { useT, setLang, LANGS } from "@/src/i18n";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -66,6 +67,7 @@ export default function Settings() {
   const router = useRouter();
   const qc = useQueryClient();
   const [confirmDel, setConfirmDel] = useState(false);
+  const { t, lang } = useT();
 
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: () => api.me() });
 
@@ -92,7 +94,7 @@ export default function Settings() {
         <TouchableOpacity testID="settings-back" style={styles.back} onPress={() => router.back()}>
           <ArrowLeft size={20} color={colors.onSurface} />
         </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
+        <Text style={styles.title}>{t("Settings")}</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
@@ -104,7 +106,7 @@ export default function Settings() {
 
         <TouchableOpacity testID="settings-reminders" style={styles.item} onPress={() => router.push("/reminders")}>
           <Bell size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Reminders</Text>
+          <Text style={styles.itemTxt}>{t("Reminders")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-referral" style={[styles.item, { borderColor: colors.brand }]} onPress={() => router.push("/referral")}>
@@ -114,22 +116,22 @@ export default function Settings() {
 
         <TouchableOpacity testID="settings-medications" style={styles.item} onPress={() => router.push("/medications")}>
           <Pill size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Medications</Text>
+          <Text style={styles.itemTxt}>{t("Medications")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-food" style={styles.item} onPress={() => router.push("/food-scanner")}>
           <Utensils size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Food scanner</Text>
+          <Text style={styles.itemTxt}>{t("Food scanner")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-clinics" style={styles.item} onPress={() => router.push("/clinics")}>
           <Hospital size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Nearby clinics</Text>
+          <Text style={styles.itemTxt}>{t("Nearby clinics")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-pharmacy" style={styles.item} onPress={() => router.push("/pharmacy")}>
           <Store size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Pharmacy watch</Text>
+          <Text style={styles.itemTxt}>{t("Pharmacy watch")}</Text>
         </TouchableOpacity>
 
         {user?.role === "admin" ? (
@@ -141,22 +143,27 @@ export default function Settings() {
 
         <TouchableOpacity testID="settings-insights" style={styles.item} onPress={() => router.push("/weekly-insights")}>
           <TrendingUp size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Weekly insights</Text>
+          <Text style={styles.itemTxt}>{t("Weekly insights")}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity testID="settings-caregivers" style={styles.item} onPress={() => router.push("/caregivers")}>
+          <HeartHandshake size={18} color={colors.brand} />
+          <Text style={styles.itemTxt}>{t("Family & caregivers")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-family" style={styles.item} onPress={() => router.push("/family-alerts")}>
           <Users size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Family alerts</Text>
+          <Text style={styles.itemTxt}>{t("Family alerts")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-share" style={styles.item} onPress={() => router.push("/share-link")}>
           <Link2 size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Doctor share link</Text>
+          <Text style={styles.itemTxt}>{t("Doctor share link")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity testID="settings-report" style={styles.item} onPress={() => router.push("/report")}>
           <FileText size={18} color={colors.brand} />
-          <Text style={styles.itemTxt}>Export doctor report</Text>
+          <Text style={styles.itemTxt}>{t("Export doctor report")}</Text>
         </TouchableOpacity>
 
         <View style={styles.item}>
@@ -164,8 +171,32 @@ export default function Settings() {
           <Text style={styles.itemTxt}>Units: mmol/L · mmHg · Zambia</Text>
         </View>
 
+        <View style={styles.themeSection} testID="language-section">
+          <Text style={styles.sectionLabel}>{t("Language")}</Text>
+          <View style={[styles.themeRow, { flexWrap: "wrap" }]}>
+            {LANGS.map((l) => {
+              const active = lang === l.code;
+              return (
+                <TouchableOpacity
+                  key={l.code}
+                  testID={`lang-${l.code}`}
+                  style={[styles.themeChip, { minWidth: "45%" }, active && styles.themeChipActive]}
+                  onPress={() => setLang(l.code)}
+                >
+                  <Text style={[styles.themeChipTxt, active && styles.themeChipTxtActive]}>{l.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {lang !== "en" ? (
+            <Text style={[styles.footerTxt, { marginTop: spacing.sm, textAlign: "left" }]} testID="lang-ai-note">
+              {t("AI-drafted translation — please help us improve it.")}
+            </Text>
+          ) : null}
+        </View>
+
         <View style={styles.themeSection}>
-          <Text style={styles.sectionLabel}>Appearance</Text>
+          <Text style={styles.sectionLabel}>{t("Appearance")}</Text>
           <View style={styles.themeRow}>
             {(["system", "light", "dark"] as ThemePref[]).map((p) => {
               const active = pref === p;
@@ -189,7 +220,7 @@ export default function Settings() {
 
         <TouchableOpacity testID="settings-logout" style={styles.logout} onPress={logout}>
           <LogOut size={18} color={colors.error} />
-          <Text style={styles.logoutTxt}>Sign out</Text>
+          <Text style={styles.logoutTxt}>{t("Sign out")}</Text>
         </TouchableOpacity>
 
         {confirmDel ? (
@@ -223,7 +254,7 @@ export default function Settings() {
         ) : (
           <TouchableOpacity testID="settings-delete" style={styles.deleteTrigger} onPress={() => setConfirmDel(true)}>
             <Trash2 size={16} color={colors.error} />
-            <Text style={styles.deleteTriggerTxt}>Delete account</Text>
+            <Text style={styles.deleteTriggerTxt}>{t("Delete account")}</Text>
           </TouchableOpacity>
         )}
 

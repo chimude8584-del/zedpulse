@@ -3,12 +3,13 @@ import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndic
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle, Store, Lightbulb } from "lucide-react-native";
+import { Activity, HeartPulse, Settings, FileText, AlertTriangle, CheckCircle2, Bell, Pill, Flame, Utensils, Hospital, TrendingUp, MessageCircle, Store, Lightbulb, Siren, Share2, HeartHandshake } from "lucide-react-native";
 
 import { api } from "@/src/api";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 import { fmtDate, severityColor } from "@/src/utils/format";
 import { waMessage } from "@/app/family-alerts";
+import { useT } from "@/src/i18n";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -77,6 +78,14 @@ const useStyles = makeStyles((c) => ({
   },
   waAlertBtnTxt: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
   alertLink: { marginTop: spacing.sm, color: c.error, fontSize: 13, fontWeight: "600" },
+  sosBtn: {
+    marginTop: spacing.lg,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm,
+    paddingVertical: 14, paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: c.error, borderWidth: 1, borderColor: c.error,
+  },
+  sosTxt: { color: c.onError, fontSize: 15, fontWeight: "800", letterSpacing: 0.5 },
   tipCard: {
     flexDirection: "row", gap: spacing.md, padding: spacing.lg,
     borderRadius: radius.lg, backgroundColor: c.brandSecondary,
@@ -110,7 +119,8 @@ export default function Dashboard() {
     queryFn: () => api.summary(),
   });
   const { data: contact } = useQuery({ queryKey: ["emergency-contact"], queryFn: () => api.getEmergencyContact() });
-  const { data: tip } = useQuery({ queryKey: ["tip-today"], queryFn: () => api.tipToday(), staleTime: 1000 * 60 * 60 });
+  const { t, lang } = useT();
+  const { data: tip } = useQuery({ queryKey: ["tip-today", lang], queryFn: () => api.tipToday(lang), staleTime: 1000 * 60 * 60 });
 
   const onRefresh = useCallback(() => {
     refetch();
@@ -130,9 +140,9 @@ export default function Dashboard() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.hello}>Hello{user?.name ? "," : ""}</Text>
+          <Text style={styles.hello}>{t("Hello")}{user?.name ? "," : ""}</Text>
           <Text style={styles.greet} testID="dashboard-greet">
-            {user?.name || "Welcome back"}
+            {user?.name || t("Welcome back")}
           </Text>
         </View>
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
@@ -145,7 +155,7 @@ export default function Dashboard() {
           {data?.streak_days ? (
             <View style={styles.streakChip} testID="streak-chip">
               <Flame size={14} color={colors.warning} />
-              <Text style={styles.streakTxt}>{data.streak_days}d streak</Text>
+              <Text style={styles.streakTxt}>{data.streak_days}{t("d streak")}</Text>
             </View>
           ) : null}
           <TouchableOpacity
@@ -172,7 +182,7 @@ export default function Dashboard() {
               <Lightbulb size={18} color={colors.onBrand} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.tipLabel}>Today's tip · Zambia 🇿🇲</Text>
+              <Text style={styles.tipLabel}>{t("Today's tip · Zambia 🇿🇲")}</Text>
               <Text style={styles.tipTitle}>{tip.title}</Text>
               <Text style={styles.tipBody}>{tip.body}</Text>
             </View>
@@ -183,7 +193,7 @@ export default function Dashboard() {
           <View key={i} style={[styles.alertBanner, { borderLeftColor: colors.error }]} testID={`critical-alert-${i}`}>
             <AlertTriangle color={colors.error} size={22} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.alertTitle}>{r.label}</Text>
+              <Text style={styles.alertTitle}>{t(r.label)}</Text>
               <Text style={styles.alertMsg}>{r.message}</Text>
               {contact?.phone ? (
                 <TouchableOpacity
@@ -199,7 +209,7 @@ export default function Dashboard() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity testID={`alert-setup-family-${i}`} onPress={() => router.push("/family-alerts")}>
-                  <Text style={styles.alertLink}>Set up family alerts →</Text>
+                  <Text style={styles.alertLink}>{t("Set up family alerts →")}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -216,12 +226,12 @@ export default function Dashboard() {
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Activity size={16} color={colors.brand} />
-              <Text style={styles.cardTitle}>Blood Glucose</Text>
+              <Text style={styles.cardTitle}>{t("Blood Glucose")}</Text>
             </View>
             {latestG ? (
               <View style={[styles.statusChip, { backgroundColor: severityColor(latestG.severity, colors) + "22" }]}>
                 <Text style={[styles.statusChipText, { color: severityColor(latestG.severity, colors) }]}>
-                  {latestG.label}
+                  {t(latestG.label)}
                 </Text>
               </View>
             ) : null}
@@ -235,18 +245,18 @@ export default function Dashboard() {
               <View style={styles.cardFooter}>
                 <Text style={styles.timeTxt}>{fmtDate(latestG.timestamp)}</Text>
                 {g?.avg_mmol_l ? (
-                  <Text style={styles.avgTxt}>30-day avg {g.avg_mmol_l}</Text>
+                  <Text style={styles.avgTxt}>{t("30-day avg")} {g.avg_mmol_l}</Text>
                 ) : null}
               </View>
               {g?.in_range_pct != null ? (
                 <View style={{ marginTop: spacing.md, flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <CheckCircle2 size={14} color={colors.success} />
-                  <Text style={styles.avgTxt}>{g.in_range_pct}% in range (last 30)</Text>
+                  <Text style={styles.avgTxt}>{g.in_range_pct}{t("% in range (last 30)")}</Text>
                 </View>
               ) : null}
             </>
           ) : (
-            <Text style={styles.emptyTxt}>No glucose readings yet. Tap “Log” to add one.</Text>
+            <Text style={styles.emptyTxt}>{t("No glucose readings yet. Tap “Log” to add one.")}</Text>
           )}
         </TouchableOpacity>
 
@@ -260,12 +270,12 @@ export default function Dashboard() {
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <HeartPulse size={16} color={colors.brand} />
-              <Text style={styles.cardTitle}>Blood Pressure</Text>
+              <Text style={styles.cardTitle}>{t("Blood Pressure")}</Text>
             </View>
             {latestB ? (
               <View style={[styles.statusChip, { backgroundColor: severityColor(latestB.severity, colors) + "22" }]}>
                 <Text style={[styles.statusChipText, { color: severityColor(latestB.severity, colors) }]}>
-                  {latestB.label}
+                  {t(latestB.label)}
                 </Text>
               </View>
             ) : null}
@@ -279,12 +289,12 @@ export default function Dashboard() {
               <View style={styles.cardFooter}>
                 <Text style={styles.timeTxt}>{fmtDate(latestB.timestamp)}</Text>
                 {b?.avg_systolic ? (
-                  <Text style={styles.avgTxt}>30-day avg {b.avg_systolic}/{b.avg_diastolic}</Text>
+                  <Text style={styles.avgTxt}>{t("30-day avg")} {b.avg_systolic}/{b.avg_diastolic}</Text>
                 ) : null}
               </View>
             </>
           ) : (
-            <Text style={styles.emptyTxt}>No BP readings yet. Tap “Log” to add one.</Text>
+            <Text style={styles.emptyTxt}>{t("No BP readings yet. Tap “Log” to add one.")}</Text>
           )}
         </TouchableOpacity>
 
@@ -296,7 +306,7 @@ export default function Dashboard() {
             onPress={() => router.push("/(tabs)/log")}
           >
             <PlusIcon />
-            <Text style={styles.quickBtnTxt}>Log reading</Text>
+            <Text style={styles.quickBtnTxt}>{t("Log reading")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             testID="open-report-button"
@@ -304,7 +314,7 @@ export default function Dashboard() {
             onPress={() => router.push("/report")}
           >
             <FileText size={16} color={colors.onSurface} />
-            <Text style={styles.secondaryBtnTxt}>Share report</Text>
+            <Text style={styles.secondaryBtnTxt}>{t("Share report")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -315,7 +325,7 @@ export default function Dashboard() {
             onPress={() => router.push("/reminders")}
           >
             <Bell size={16} color={colors.onSurface} />
-            <Text style={styles.secondaryBtnTxt}>Reminders</Text>
+            <Text style={styles.secondaryBtnTxt}>{t("Reminders")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             testID="open-medications-button"
@@ -323,7 +333,7 @@ export default function Dashboard() {
             onPress={() => router.push("/medications")}
           >
             <Pill size={16} color={colors.onSurface} />
-            <Text style={styles.secondaryBtnTxt}>Medications</Text>
+            <Text style={styles.secondaryBtnTxt}>{t("Medications")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -334,7 +344,7 @@ export default function Dashboard() {
             onPress={() => router.push("/food-scanner")}
           >
             <Utensils size={16} color={colors.onSurface} />
-            <Text style={styles.secondaryBtnTxt}>Food scan</Text>
+            <Text style={styles.secondaryBtnTxt}>{t("Food scan")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             testID="open-clinics-button"
@@ -342,7 +352,7 @@ export default function Dashboard() {
             onPress={() => router.push("/clinics")}
           >
             <Hospital size={16} color={colors.onSurface} />
-            <Text style={styles.secondaryBtnTxt}>Clinics</Text>
+            <Text style={styles.secondaryBtnTxt}>{t("Clinics")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -352,7 +362,7 @@ export default function Dashboard() {
           onPress={() => router.push("/weekly-insights")}
         >
           <TrendingUp size={16} color={colors.onSurface} />
-          <Text style={styles.secondaryBtnTxt}>Weekly insights</Text>
+          <Text style={styles.secondaryBtnTxt}>{t("Weekly insights")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -361,7 +371,35 @@ export default function Dashboard() {
           onPress={() => router.push("/pharmacy")}
         >
           <Store size={16} color={colors.onSurface} />
-          <Text style={styles.secondaryBtnTxt}>Pharmacy prices (ZMW)</Text>
+          <Text style={styles.secondaryBtnTxt}>{t("Pharmacy prices (ZMW)")}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          testID="open-caregivers-button"
+          style={[styles.secondaryBtn, { marginTop: 0 }]}
+          onPress={() => router.push("/caregivers")}
+        >
+          <HeartHandshake size={16} color={colors.onSurface} />
+          <Text style={styles.secondaryBtnTxt}>{t("Family & caregivers")}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          testID="open-share-week-button"
+          style={[styles.secondaryBtn, { marginTop: 0, borderColor: colors.brand }]}
+          onPress={() => router.push("/share-week")}
+        >
+          <Share2 size={16} color={colors.brand} />
+          <Text style={[styles.secondaryBtnTxt, { color: colors.brand, fontWeight: "700" }]}>{t("Share this week on WhatsApp")}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          testID="open-sos-button"
+          style={styles.sosBtn}
+          onPress={() => router.push("/sos")}
+          activeOpacity={0.85}
+        >
+          <Siren size={18} color={colors.onError} />
+          <Text style={styles.sosTxt}>{t("Emergency SOS")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

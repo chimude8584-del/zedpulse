@@ -72,7 +72,7 @@ export const api = {
   summary: () => request<any>("/stats/summary"),
 
   // Advice
-  advice: (body: { question?: string; kind?: string }) =>
+  advice: (body: { question?: string; kind?: string; lang?: string }) =>
     request<{ answer: string; id: string }>("/advice", { method: "POST", body }),
   adviceHistory: () => request<any[]>("/advice/history"),
 
@@ -152,8 +152,28 @@ export const api = {
     request<any>(`/admin/pharmacies/${id}`, { method: "DELETE" }),
 
   // Tips
-  tipToday: () => request<any>("/tips/today", { auth: false }),
+  tipToday: (lang: string = "en") => request<any>(`/tips/today?lang=${lang}`, { auth: false }),
 
   // Referral
   myReferral: () => request<{ code: string; pro_until: string | null; is_pro: boolean; invites_count: number; share_text: string }>("/referral/me"),
+
+  // SOS + nearest clinic
+  nearestClinic: (lat: number, lng: number, limit = 3) =>
+    request<any[]>(`/clinics/nearest?lat=${lat}&lng=${lng}&limit=${limit}`, { auth: false }),
+  logSOS: (body: { lat?: number; lng?: number; note?: string }) =>
+    request<any>("/sos/log", { method: "POST", body }),
+
+  // Weekly share
+  shareWeekly: () => request<any>("/share/weekly"),
+
+  // Caregivers
+  caregiverInvite: () => request<{ code: string; expires_at: string; share_text: string }>("/caregivers/invite", { method: "POST" }),
+  caregiverAccept: (code: string) =>
+    request<any>("/caregivers/accept", { method: "POST", body: { code } }),
+  myPatients: () => request<any[]>("/caregivers/patients"),
+  myCaregivers: () => request<any[]>("/caregivers/caregivers"),
+  unlinkCaregiver: (id: string) =>
+    request<any>(`/caregivers/link/${id}`, { method: "DELETE" }),
+  caregiverReadings: (patientId: string) =>
+    request<{ patient_name: string; patient_phone: string; glucose: any[]; bp: any[] }>(`/caregivers/readings/${patientId}`),
 };

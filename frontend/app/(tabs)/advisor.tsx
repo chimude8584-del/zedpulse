@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Sparkles, Apple, Pill, HeartPulse, Activity, Send } from "lucide-react-native";
 
 import { api } from "@/src/api";
+import { getLang } from "@/src/i18n";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 
 const useStyles = makeStyles((c) => ({
@@ -80,7 +81,7 @@ export default function Advisor() {
     setInput("");
     setLoading(true);
     try {
-      const resp = await api.advice({ question: text || undefined, kind });
+      const resp = await api.advice({ question: text || undefined, kind, lang: getLang() });
       setMessages((m) => [...m, { role: "ai", text: resp.answer }]);
     } catch (e: any) {
       setMessages((m) => [...m, { role: "ai", text: `Sorry — ${e.message || "something went wrong"}.` }]);

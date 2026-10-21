@@ -43,3 +43,7 @@ Cumulative 96/96 backend tests pass (31 original + 22 Zambia + 27 ZedPulse + 13 
 
 ## Expo Go compatibility
 Camera, gallery, location, local notifications, offline cache: all work in Expo Go. Background push / background audio require a native build.
+
+## Update (June 2026)
+- Family & Caregivers: invite code (7 days), accept, read-only caregiver view (/caregiver-view) of last 14 days glucose/BP with out-of-range alert banner. Linked from Settings + Dashboard. Tested (iteration_13).
+- Local language switch: English / Nyanja / Bemba / Tonga (src/i18n.ts, persisted). Translates tabs, dashboard, settings, status labels. Daily tips AI-translated on demand + cached (db.tip_translations). AI Advisor replies in chosen language. Translations are AI-drafted; need native-speaker review. Tested (iteration_14).

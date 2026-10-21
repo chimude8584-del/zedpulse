@@ -1,0 +1,30 @@
+{
+  "summary": "Language toggle (English / Nyanja / Bemba / Tonga) end-to-end tested. Backend: 10/10 pytest cases pass covering GET /api/tips/today for en/ny/bem/toi/unknown — translated title+body with lang + ai_drafted=true for ny/bem/toi, English fallback for lang=en, missing, or unknown (e.g. xx). Translation caching verified (2nd call returned in <1s from db.tip_translations). POST /api/advice works with lang='bem' (returns Bemba reply ~200-400 chars) and without lang (English). Unauthenticated advice returns 401. Frontend (390x844): Settings has language-section with chips lang-en/ny/bem/toi; selecting non-English shows lang-ai-note and translates Settings title to Zokonda (ny). Nyanja → dashboard shows 'Shuga m'magazi', 'Lembani muyeso', 'Thandizo mwachangu (SOS)' and tabs 'Kunyumba/Lembani/Mbiri/Uphungu'; daily-tip card shows AI-translated Nyanja text ('HbA1c miyezi 3-6 iliyonse …'). Bemba Home='Ku ng'anda' and Tonga Home='Kuŋanda' verified. Switching back to English fully restores English labels. Nyanja choice persists after page reload (storage key zedpulse.lang). Regression: Family & caregivers button (open-caregivers-button) still navigates to /caregivers from dashboard. No deprecated expo packages or React Native red-screen errors detected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_14_language.py",
+    "/app/test_reports/pytest/pytest_language.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py now ~1900+ lines — still worth splitting into feature routers per 700-line guideline (noted previously).",
+    "translate_tip stores doc including the `idx` and `lang` fields that duplicate the lookup keys; harmless, just note.",
+    "i18n.ts: the module-level IIFE restoring the stored lang runs async, so very first render may still show English keys until storage resolves (sub-second). This causes an intentional small flicker that is acceptable but worth tracking.",
+    "advice endpoint appends 'reply in <lang>' instruction to user message when input.lang is in LANG_NAMES; en and unknown codes correctly skip the instruction."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_14_language.py (new)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (chips, labels, persistence, regression all pass)"},
+  "seed_data_creation": "Reused primary +15550001234/1234 (Alex). Backend test creates a fresh TEST_PytestUser each session for /api/advice calls. tip_translations collection now cached with 3 locale entries for today's index=38.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run with `pytest backend/tests/test_14_language.py -v -o addopts=''`. First call to a new tip lang costs ~5s via Emergent LLM; subsequent calls are cached in db.tip_translations ({idx,lang}). Frontend testIDs for language: language-section, lang-en, lang-ny, lang-bem, lang-toi, lang-ai-note. Onboarding is per-browser-session so the test must dismiss onb-skip before login. Language is reset to English at end of frontend run.",
+  "rca_of_issue": "N/A — no bugs found."
+}

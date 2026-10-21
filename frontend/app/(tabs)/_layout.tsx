@@ -3,9 +3,11 @@ import { Home, PlusCircle, LineChart, Sparkles } from "lucide-react-native";
 import { Platform } from "react-native";
 
 import { useTheme } from "@/src/theme";
+import { useT } from "@/src/i18n";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const { t } = useT();
   return (
     <Tabs
       screenOptions={{
@@ -24,28 +26,28 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: t("Home"),
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="log"
         options={{
-          title: "Log",
+          title: t("Log"),
           tabBarIcon: ({ color, size }) => <PlusCircle color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
+          title: t("History"),
           tabBarIcon: ({ color, size }) => <LineChart color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="advisor"
         options={{
-          title: "Advisor",
+          title: t("Advisor"),
           tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} />,
         }}
       />

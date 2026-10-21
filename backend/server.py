@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import json
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -68,6 +69,7 @@ class BPIn(BaseModel):
 class AdviceIn(BaseModel):
     question: Optional[str] = None  # if None, generate overview advice
     kind: Literal["general", "diet", "treatment", "bp", "glucose"] = "general"
+    lang: Optional[str] = "en"
 
 
 # -------------------- Auth helpers --------------------
@@ -214,6 +216,163 @@ async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     return current_user
 
 
+# -------------------- Caregivers / Family view --------------------
+class CaregiverAcceptIn(BaseModel):
+    code: str
+
+
+def _gen_cg_code():
+    import random, string
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+
+@api_router.post("/caregivers/invite")
+async def caregiver_invite(current_user: dict = Depends(get_current_user)):
+    """Patient generates (or reuses) an 8-char code to invite a caregiver. Valid 7 days."""
+    now = datetime.now(timezone.utc)
+    # Reuse active invite if present
+    existing = await db.caregiver_invites.find_one({
+        "patient_user_id": current_user["id"],
+        "used_at": {"$exists": False},
+        "expires_at": {"$gt": now.isoformat()},
+    })
+    if existing:
+        code = existing["code"]
+        expires_iso = existing["expires_at"]
+    else:
+        for _ in range(10):
+            code = _gen_cg_code()
+            if not await db.caregiver_invites.find_one({"code": code}):
+                break
+        expires_iso = (now + timedelta(days=7)).isoformat()
+        await db.caregiver_invites.insert_one({
+            "id": str(uuid.uuid4()),
+            "code": code,
+            "patient_user_id": current_user["id"],
+            "patient_name": current_user.get("name") or current_user.get("phone"),
+            "created_at": now.isoformat(),
+            "expires_at": expires_iso,
+        })
+
+    share_text = (
+        f"Hi, I'd like you to help watch my health on ZedPulse 🇿🇲. "
+        f"Open the app → Settings → Family & caregivers → Enter code and use *{code}*. "
+        f"It expires in 7 days. You'll see my glucose and BP readings so we can look after each other."
+    )
+    return {"code": code, "expires_at": expires_iso, "share_text": share_text}
+
+
+@api_router.post("/caregivers/accept")
+async def caregiver_accept(input: CaregiverAcceptIn, current_user: dict = Depends(get_current_user)):
+    code = (input.code or "").strip().upper()
+    if len(code) < 4:
+        raise HTTPException(status_code=400, detail="Invalid code")
+    now = datetime.now(timezone.utc)
+    inv = await db.caregiver_invites.find_one({"code": code})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Code not found")
+    try:
+        expires = datetime.fromisoformat(inv["expires_at"])
+    except Exception:
+        expires = now
+    if expires <= now:
+        raise HTTPException(status_code=400, detail="Code has expired")
+    if inv.get("used_at"):
+        raise HTTPException(status_code=400, detail="Code already used")
+    if inv["patient_user_id"] == current_user["id"]:
+        raise HTTPException(status_code=400, detail="You cannot be your own caregiver")
+
+    # Prevent duplicate link
+    existing = await db.caregiver_links.find_one({
+        "patient_user_id": inv["patient_user_id"],
+        "caregiver_user_id": current_user["id"],
+        "status": "active",
+    })
+    if existing:
+        return {"ok": True, "already_linked": True, "patient_name": inv.get("patient_name")}
+
+    patient_user = await db.users.find_one({"id": inv["patient_user_id"]})
+    link_doc = {
+        "id": str(uuid.uuid4()),
+        "patient_user_id": inv["patient_user_id"],
+        "patient_name": (patient_user.get("name") if patient_user else None) or inv.get("patient_name"),
+        "patient_phone": patient_user.get("phone") if patient_user else None,
+        "caregiver_user_id": current_user["id"],
+        "caregiver_name": current_user.get("name") or current_user.get("phone"),
+        "caregiver_phone": current_user.get("phone"),
+        "status": "active",
+        "created_at": now.isoformat(),
+    }
+    await db.caregiver_links.insert_one(link_doc)
+    await db.caregiver_invites.update_one(
+        {"code": code},
+        {"$set": {"used_at": now.isoformat(), "used_by": current_user["id"]}},
+    )
+    return {"ok": True, "patient_name": link_doc["patient_name"], "patient_id": link_doc["patient_user_id"]}
+
+
+@api_router.get("/caregivers/patients")
+async def caregiver_patients(current_user: dict = Depends(get_current_user)):
+    """List patients I'm caring for."""
+    cursor = db.caregiver_links.find(
+        {"caregiver_user_id": current_user["id"], "status": "active"},
+        {"_id": 0},
+    ).sort("created_at", -1)
+    return await cursor.to_list(length=50)
+
+
+@api_router.get("/caregivers/caregivers")
+async def my_caregivers(current_user: dict = Depends(get_current_user)):
+    """List caregivers who can see my data."""
+    cursor = db.caregiver_links.find(
+        {"patient_user_id": current_user["id"], "status": "active"},
+        {"_id": 0},
+    ).sort("created_at", -1)
+    return await cursor.to_list(length=50)
+
+
+@api_router.delete("/caregivers/link/{link_id}")
+async def unlink_caregiver(link_id: str, current_user: dict = Depends(get_current_user)):
+    """Either side can unlink."""
+    link = await db.caregiver_links.find_one({"id": link_id})
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+    if link["patient_user_id"] != current_user["id"] and link["caregiver_user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not your link")
+    await db.caregiver_links.update_one({"id": link_id}, {"$set": {"status": "removed", "removed_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True}
+
+
+@api_router.get("/caregivers/readings/{patient_id}")
+async def caregiver_readings(patient_id: str, current_user: dict = Depends(get_current_user)):
+    """Caregiver fetches a patient's last-14-days readings (if link is active)."""
+    link = await db.caregiver_links.find_one({
+        "patient_user_id": patient_id,
+        "caregiver_user_id": current_user["id"],
+        "status": "active",
+    })
+    if not link:
+        raise HTTPException(status_code=403, detail="Not linked to this patient")
+
+    start = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    gluc = await db.glucose_readings.find(
+        {"user_id": patient_id, "timestamp": {"$gte": start}, "deleted_at": {"$exists": False}},
+        {"_id": 0, "user_id": 0},
+    ).sort("timestamp", -1).to_list(length=200)
+    bp = await db.bp_readings.find(
+        {"user_id": patient_id, "timestamp": {"$gte": start}, "deleted_at": {"$exists": False}},
+        {"_id": 0, "user_id": 0},
+    ).sort("timestamp", -1).to_list(length=200)
+
+    return {
+        "patient_name": link.get("patient_name"),
+        "patient_phone": link.get("patient_phone"),
+        "glucose": gluc,
+        "bp": bp,
+    }
+
+
+
 # -------------------- Referral --------------------
 @api_router.get("/referral/me")
 async def my_referral(current_user: dict = Depends(get_current_user)):
@@ -357,8 +516,40 @@ ZAMBIA_TIPS = [
 ]
 
 
+LANG_NAMES = {"ny": "Nyanja (Chinyanja, as spoken in Lusaka/Eastern Zambia)", "bem": "Bemba (Icibemba, Zambia)", "toi": "Tonga (Chitonga, Southern Zambia)"}
+
+
+async def translate_tip(idx: int, lang: str) -> Optional[dict]:
+    """AI-translate a tip once and cache it in Mongo."""
+    cached = await db.tip_translations.find_one({"idx": idx, "lang": lang}, {"_id": 0})
+    if cached:
+        return cached
+    if not EMERGENT_LLM_KEY:
+        return None
+    src = ZAMBIA_TIPS[idx]
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"tip-tr-{idx}-{lang}-{uuid.uuid4()}",
+        system_message=(
+            f"You translate short health tips into {LANG_NAMES[lang]}. Use simple everyday words. "
+            "Keep numbers, units (mmol/L, mmHg), brand and place names unchanged. "
+            'Reply ONLY with JSON: {"title": "...", "body": "..."}'
+        ),
+    ).with_model("openai", "gpt-5.6-terra")
+    try:
+        raw = await chat.send_message(UserMessage(text=json.dumps({"title": src["title"], "body": src["body"]})))
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = json.loads(raw)
+        doc = {"idx": idx, "lang": lang, "title": str(parsed["title"]), "body": str(parsed["body"]), "ai_drafted": True}
+    except Exception:
+        logger.exception("Tip translation failed")
+        return None
+    await db.tip_translations.insert_one(dict(doc))
+    return doc
+
+
 @api_router.get("/tips/today")
-async def tip_today():
+async def tip_today(lang: str = "en"):
     """Return today's rotating Zambian health tip (seeded, day-of-year based)."""
     if not ZAMBIA_TIPS:
         raise HTTPException(status_code=500, detail="No tips configured")
@@ -366,6 +557,11 @@ async def tip_today():
     # Deterministic rotation across the pool
     idx = today.toordinal() % len(ZAMBIA_TIPS)
     tip = dict(ZAMBIA_TIPS[idx])
+    tip["lang"] = "en"
+    if lang in LANG_NAMES:
+        tr = await translate_tip(idx, lang)
+        if tr:
+            tip.update({"title": tr["title"], "body": tr["body"], "lang": lang, "ai_drafted": True})
     tip["id"] = f"{today.isoformat()}-{idx}"
     tip["date"] = today.isoformat()
     tip["total"] = len(ZAMBIA_TIPS)
@@ -677,6 +873,8 @@ async def advice(input: AdviceIn, current_user: dict = Depends(get_current_user)
             "general": "a short overview of what I should focus on today",
         }[input.kind]
         user_text = f"My recent data: {context_str}\n\nGive me {focus}."
+    if input.lang in LANG_NAMES:
+        user_text += f"\n\nPlease reply in {LANG_NAMES[input.lang]}, using simple words. Keep numbers and units (mmol/L, mmHg) as they are."
 
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
@@ -1242,6 +1440,134 @@ async def list_clinics(city: Optional[str] = None):
     if city:
         items = [c for c in items if c["city"].lower() == city.lower()]
     return items
+
+
+@api_router.get("/clinics/nearest")
+async def nearest_clinic(lat: float, lng: float, limit: int = 3):
+    """Return the N nearest clinics by haversine distance from the given coords."""
+    import math
+
+    def haversine(a_lat, a_lng, b_lat, b_lng):
+        R = 6371.0
+        phi1 = math.radians(a_lat)
+        phi2 = math.radians(b_lat)
+        dphi = math.radians(b_lat - a_lat)
+        dlambda = math.radians(b_lng - a_lng)
+        a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+        return 2 * R * math.asin(math.sqrt(a))
+
+    scored = []
+    for c in ZAMBIAN_CLINICS:
+        try:
+            d = haversine(lat, lng, c["lat"], c["lng"])
+            scored.append({**c, "distance_km": round(d, 1)})
+        except Exception:
+            continue
+    scored.sort(key=lambda x: x["distance_km"])
+    return scored[:max(1, min(limit, 10))]
+
+
+class SOSEventIn(BaseModel):
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    note: Optional[str] = None
+
+
+@api_router.post("/sos/log")
+async def log_sos(input: SOSEventIn, current_user: dict = Depends(get_current_user)):
+    """Log an SOS event (so admin can see activation frequency)."""
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "lat": input.lat,
+        "lng": input.lng,
+        "note": input.note,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.sos_events.insert_one(doc)
+    return {"ok": True, "id": doc["id"]}
+
+
+# -------------------- Weekly share --------------------
+@api_router.get("/share/weekly")
+async def share_weekly(current_user: dict = Depends(get_current_user)):
+    """Compute last-7-days stats for the share card."""
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=7)
+    start_iso = start.isoformat()
+
+    gluc_cursor = db.glucose_readings.find({
+        "user_id": current_user["id"],
+        "created_at": {"$gte": start_iso},
+        "deleted_at": {"$exists": False},
+    })
+    gluc = await gluc_cursor.to_list(length=1000)
+
+    bp_cursor = db.bp_readings.find({
+        "user_id": current_user["id"],
+        "created_at": {"$gte": start_iso},
+        "deleted_at": {"$exists": False},
+    })
+    bp = await bp_cursor.to_list(length=1000)
+
+    # Glucose stats
+    g_values = [r.get("value_mmol") for r in gluc if r.get("value_mmol") is not None]
+    in_range = [v for v in g_values if 3.9 <= v <= 10.0]
+    hypos = [v for v in g_values if v < 3.9]
+    hypers = [v for v in g_values if v > 13.9]
+    in_range_pct = round(100 * len(in_range) / len(g_values)) if g_values else None
+    avg_gluc = round(sum(g_values) / len(g_values), 1) if g_values else None
+
+    # BP stats
+    sys_vals = [r.get("systolic") for r in bp if r.get("systolic") is not None]
+    dia_vals = [r.get("diastolic") for r in bp if r.get("diastolic") is not None]
+    avg_sys = round(sum(sys_vals) / len(sys_vals)) if sys_vals else None
+    avg_dia = round(sum(dia_vals) / len(dia_vals)) if dia_vals else None
+
+    # Logging streak: unique days in the past 7 that have readings
+    def _date_from_iso(iso: str) -> Optional[str]:
+        try:
+            return datetime.fromisoformat(iso).date().isoformat()
+        except Exception:
+            return None
+
+    log_days = set()
+    for r in gluc + bp:
+        d = _date_from_iso(r.get("created_at", ""))
+        if d:
+            log_days.add(d)
+
+    user = await db.users.find_one({"id": current_user["id"]})
+    name = (user.get("name") if user else None) or (current_user.get("phone") or "").replace("+", "")
+
+    # Encouraging message based on data
+    if not g_values and not bp:
+        encouragement = "A fresh week to start logging — small steps add up."
+    elif in_range_pct is not None and in_range_pct >= 80:
+        encouragement = "Great week — most of your glucose readings were in range. Keep it up! 🌿"
+    elif in_range_pct is not None and in_range_pct >= 50:
+        encouragement = "Solid progress. A little more consistency and you'll be in the sweet spot."
+    elif len(log_days) >= 5:
+        encouragement = "Consistency is king — logging most days is already a big win."
+    else:
+        encouragement = "Every reading matters. Log a bit more next week to see your trend clearly."
+
+    return {
+        "name": name,
+        "week_start": start.date().isoformat(),
+        "week_end": now.date().isoformat(),
+        "glucose_count": len(g_values),
+        "glucose_in_range_pct": in_range_pct,
+        "glucose_avg": avg_gluc,
+        "hypos_count": len(hypos),
+        "hypers_count": len(hypers),
+        "bp_count": len(bp),
+        "bp_avg_systolic": avg_sys,
+        "bp_avg_diastolic": avg_dia,
+        "log_days": len(log_days),
+        "encouragement": encouragement,
+    }
+
 
 
 # -------------------- Weekly Insights --------------------
