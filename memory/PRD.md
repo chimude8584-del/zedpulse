@@ -47,3 +47,4 @@ Camera, gallery, location, local notifications, offline cache: all work in Expo 
 ## Update (June 2026)
 - Family & Caregivers: invite code (7 days), accept, read-only caregiver view (/caregiver-view) of last 14 days glucose/BP with out-of-range alert banner. Linked from Settings + Dashboard. Tested (iteration_13).
 - Local language switch: English / Nyanja / Bemba / Tonga (src/i18n.ts, persisted). Translates tabs, dashboard, settings, status labels. Daily tips AI-translated on demand + cached (db.tip_translations). AI Advisor replies in chosen language. Translations are AI-drafted; need native-speaker review. Tested (iteration_14).
+- Full translation extended to Log, History, SOS, Family & caregivers and caregiver-view screens (src/i18n-screens.ts merged into src/i18n.ts). Tested (iteration_15 + self-test of caregiver-view).

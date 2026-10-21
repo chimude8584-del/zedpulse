@@ -7,6 +7,7 @@ import * as Location from "expo-location";
 import { ArrowLeft, Phone, MapPin, Hospital, AlertTriangle, Users, ChevronRight } from "lucide-react-native";
 
 import { api } from "@/src/api";
+import { useT } from "@/src/i18n";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 
 const useStyles = makeStyles((c) => ({
@@ -78,6 +79,7 @@ export default function SOS() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t } = useT();
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -96,11 +98,11 @@ export default function SOS() {
       if (perm.status !== "granted") {
         if (!perm.canAskAgain) {
           Alert.alert(
-            "Location permission needed",
-            "To find the nearest clinic and share your position, enable location in your phone settings.",
+            t("Location permission needed"),
+            t("To find the nearest clinic and share your position, enable location in your phone settings."),
             [
-              { text: "Not now", style: "cancel" },
-              { text: "Open settings", onPress: () => Linking.openSettings() },
+              { text: t("Not now"), style: "cancel" },
+              { text: t("Open settings"), onPress: () => Linking.openSettings() },
             ],
           );
           return null;
@@ -141,11 +143,11 @@ export default function SOS() {
     const p = digits(contactQ.data?.phone);
     if (!p) {
       Alert.alert(
-        "No emergency contact set",
-        "Add a family member or caregiver's number so you can reach them with one tap.",
+        t("No emergency contact set"),
+        t("Add a family member or caregiver's number so you can reach them with one tap."),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Add contact", onPress: () => router.push("/family-alerts") },
+          { text: t("Cancel"), style: "cancel" },
+          { text: t("Add contact"), onPress: () => router.push("/family-alerts") },
         ],
       );
       return;
@@ -161,11 +163,11 @@ export default function SOS() {
     const p = digits(contactQ.data?.phone);
     if (!p) {
       Alert.alert(
-        "No emergency contact set",
-        "Add a family contact so we can WhatsApp them your location.",
+        t("No emergency contact set"),
+        t("Add a family contact so we can WhatsApp them your location."),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Add contact", onPress: () => router.push("/family-alerts") },
+          { text: t("Cancel"), style: "cancel" },
+          { text: t("Add contact"), onPress: () => router.push("/family-alerts") },
         ],
       );
       return;
@@ -186,7 +188,7 @@ export default function SOS() {
     if (!c) return;
     const list = await api.nearestClinic(c.lat, c.lng, 1).catch(() => []);
     if (!list?.length) {
-      Alert.alert("No clinics found", "Could not find a nearby clinic right now.");
+      Alert.alert(t("No clinics found"), "Could not find a nearby clinic right now.");
       return;
     }
     const n = list[0];
@@ -201,7 +203,7 @@ export default function SOS() {
         <TouchableOpacity testID="sos-back" style={styles.back} onPress={() => router.back()}>
           <ArrowLeft size={20} color={colors.onSurface} />
         </TouchableOpacity>
-        <Text style={styles.title}>Emergency SOS</Text>
+        <Text style={styles.title}>{t("Emergency SOS")}</Text>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
@@ -209,8 +211,8 @@ export default function SOS() {
           <View style={styles.heroIcon}>
             <AlertTriangle size={34} color={colors.onError} />
           </View>
-          <Text style={styles.heroTitle}>Are you feeling unwell?</Text>
-          <Text style={styles.heroSub}>Tap one of the actions below. We'll help you get help fast.</Text>
+          <Text style={styles.heroTitle}>{t("Are you feeling unwell?")}</Text>
+          <Text style={styles.heroSub}>{t("Tap one of the actions below. We'll help you get help fast.")}</Text>
         </View>
 
         {/* Call Family */}
@@ -219,9 +221,9 @@ export default function SOS() {
             <Phone size={22} color={colors.error} />
           </View>
           <View style={styles.actionText}>
-            <Text style={[styles.actionTitle, styles.actionTitleOnError]}>Call family</Text>
+            <Text style={[styles.actionTitle, styles.actionTitleOnError]}>{t("Call family")}</Text>
             <Text style={[styles.actionSub, styles.actionSubOnError]}>
-              {contactQ.data?.name ? `Reach ${contactQ.data.name}` : "Add an emergency contact first"}
+              {contactQ.data?.name ? `${t("Reach")} ${contactQ.data.name}` : t("Add an emergency contact first")}
             </Text>
           </View>
           <ChevronRight size={20} color={colors.onError} />
@@ -233,8 +235,8 @@ export default function SOS() {
             {locating ? <ActivityIndicator color={colors.onBrand} /> : <MapPin size={22} color={colors.onBrand} />}
           </View>
           <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Share my location</Text>
-            <Text style={styles.actionSub}>Send family a WhatsApp with Google Maps pin</Text>
+            <Text style={styles.actionTitle}>{t("Share my location")}</Text>
+            <Text style={styles.actionSub}>{t("Send family a WhatsApp with Google Maps pin")}</Text>
           </View>
           <ChevronRight size={20} color={colors.muted} />
         </TouchableOpacity>
@@ -245,8 +247,8 @@ export default function SOS() {
             <Hospital size={22} color={colors.onBrand} />
           </View>
           <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Nearest clinic</Text>
-            <Text style={styles.actionSub}>Open driving directions in Google Maps</Text>
+            <Text style={styles.actionTitle}>{t("Nearest clinic")}</Text>
+            <Text style={styles.actionSub}>{t("Open driving directions in Google Maps")}</Text>
           </View>
           <ChevronRight size={20} color={colors.muted} />
         </TouchableOpacity>
@@ -254,7 +256,7 @@ export default function SOS() {
         {/* Nearest clinics list */}
         {nearestQ.data?.length ? (
           <View style={styles.clinicBox}>
-            <Text style={styles.clinicTitle}>Closest clinics to you</Text>
+            <Text style={styles.clinicTitle}>{t("Closest clinics to you")}</Text>
             {nearestQ.data.map((cl: any, i: number) => (
               <TouchableOpacity
                 key={cl.name}
@@ -267,7 +269,7 @@ export default function SOS() {
                 <Hospital size={16} color={colors.brand} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.clinicName}>{cl.name}</Text>
-                  <Text style={styles.clinicMeta}>{cl.city} · {cl.type} · {cl.distance_km} km away</Text>
+                  <Text style={styles.clinicMeta}>{cl.city} · {cl.type} · {cl.distance_km} {t("km away")}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => {
@@ -290,8 +292,8 @@ export default function SOS() {
               <Users size={22} color={colors.onBrand} />
             </View>
             <View style={styles.actionText}>
-              <Text style={styles.actionTitle}>Add an emergency contact</Text>
-              <Text style={styles.actionSub}>So Call Family and Share Location work instantly</Text>
+              <Text style={styles.actionTitle}>{t("Add an emergency contact")}</Text>
+              <Text style={styles.actionSub}>{t("So Call Family and Share Location work instantly")}</Text>
             </View>
             <ChevronRight size={20} color={colors.muted} />
           </TouchableOpacity>
@@ -300,13 +302,13 @@ export default function SOS() {
         {/* Life-threatening advice */}
         <View style={styles.warning}>
           <Text style={styles.warningTxt}>
-            <Text style={styles.warningBold}>If you cannot breathe, are losing consciousness, or chest-pain is severe:</Text> go to the nearest hospital or dial <Text style={{ fontWeight: "800" }}>991</Text> (Zambia national emergency) immediately.
+            <Text style={styles.warningBold}>{t("If you cannot breathe, are losing consciousness, or chest-pain is severe:")}</Text> {t("go to the nearest hospital or dial")} <Text style={{ fontWeight: "800" }}>991</Text> {t("(Zambia national emergency) immediately.")}
           </Text>
         </View>
 
         <View style={styles.disclaimer}>
           <Text style={styles.disclaimerTxt}>
-            ZedPulse is not a substitute for emergency services. Always call a doctor or ambulance for serious symptoms.
+            {t("ZedPulse is not a substitute for emergency services. Always call a doctor or ambulance for serious symptoms.")}
           </Text>
         </View>
       </ScrollView>

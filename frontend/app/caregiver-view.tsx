@@ -5,7 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Droplet, HeartPulse, Phone, AlertTriangle } from "lucide-react-native";
 
 import { api } from "@/src/api";
+import { useT } from "@/src/i18n";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
+import { contextLabels } from "@/src/utils/format";
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
@@ -50,6 +52,7 @@ export default function CaregiverView() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t } = useT();
   const { pid, name } = useLocalSearchParams<{ pid: string; name?: string }>();
 
   const q = useQuery({ queryKey: ["cg-readings", pid], queryFn: () => api.caregiverReadings(String(pid)), enabled: !!pid });
@@ -57,7 +60,7 @@ export default function CaregiverView() {
   const bp = q.data?.bp || [];
   const lastG = glucose[0];
   const lastB = bp[0];
-  const displayName = q.data?.patient_name || name || "Patient";
+  const displayName = q.data?.patient_name || name || t("Patient");
 
   function tagStyle(bad: boolean) {
     return { backgroundColor: bad ? colors.error : colors.brandSecondary, color: bad ? colors.onError : colors.onBrandSecondary };
@@ -71,7 +74,7 @@ export default function CaregiverView() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} testID="cgv-name">{displayName}</Text>
-          <Text style={styles.subtitle}>Last 14 days · read-only</Text>
+          <Text style={styles.subtitle}>{t("Last 14 days · read-only")}</Text>
         </View>
         {q.data?.patient_phone ? (
           <TouchableOpacity testID="cgv-call" style={styles.callBtn} onPress={() => Linking.openURL(`tel:${q.data?.patient_phone}`)}>
@@ -84,7 +87,7 @@ export default function CaregiverView() {
         <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.brand} />
       ) : q.isError ? (
         <Text style={[styles.empty, { textAlign: "center", padding: spacing.xl }]}>
-          Could not load readings. The link may have been removed.
+          {t("Could not load readings. The link may have been removed.")}
         </Text>
       ) : (
         <ScrollView
@@ -95,19 +98,19 @@ export default function CaregiverView() {
             <View style={styles.alert} testID="cgv-alert">
               <AlertTriangle size={18} color={colors.error} />
               <Text style={styles.alertTxt}>
-                Latest reading is outside the safe range. Check on {displayName} — call them or take them to the nearest clinic if unwell.
+                {t("Latest reading is outside the safe range. Please check on them — call or take them to the nearest clinic if unwell.")}
               </Text>
             </View>
           )}
 
           <View style={styles.summaryRow}>
             <View style={styles.summary}>
-              <Text style={styles.sumLabel}>Last glucose</Text>
+              <Text style={styles.sumLabel}>{t("Last glucose")}</Text>
               <Text style={styles.sumValue}>{lastG ? lastG.value.toFixed(1) : "—"}</Text>
               <Text style={styles.sumUnit}>mmol/L {lastG ? `· ${fmt(lastG.timestamp)}` : ""}</Text>
             </View>
             <View style={styles.summary}>
-              <Text style={styles.sumLabel}>Last BP</Text>
+              <Text style={styles.sumLabel}>{t("Last BP")}</Text>
               <Text style={styles.sumValue}>{lastB ? `${lastB.systolic}/${lastB.diastolic}` : "—"}</Text>
               <Text style={styles.sumUnit}>mmHg {lastB ? `· ${fmt(lastB.timestamp)}` : ""}</Text>
             </View>
@@ -116,32 +119,32 @@ export default function CaregiverView() {
           <View style={styles.card}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "center", marginBottom: spacing.sm }}>
               <Droplet size={14} color={colors.brand} />
-              <Text style={styles.cardTitle}>Blood sugar ({glucose.length})</Text>
+              <Text style={styles.cardTitle}>{t("Blood sugar")} ({glucose.length})</Text>
             </View>
             {glucose.length ? glucose.map((g: any, i: number) => (
               <View key={g.id || i} style={styles.row} testID={`cgv-g-${i}`}>
                 <Text style={styles.val}>{Number(g.value).toFixed(1)}</Text>
-                <Text style={styles.meta}>{fmt(g.timestamp)} · {String(g.context || "").replace("_", " ")}</Text>
-                {g.label ? <Text style={[styles.tag, tagStyle(isGlucoseAlert(g))]}>{g.label}</Text> : null}
+                <Text style={styles.meta}>{fmt(g.timestamp)} · {t(contextLabels[g.context] || g.context || "")}</Text>
+                {g.label ? <Text style={[styles.tag, tagStyle(isGlucoseAlert(g))]}>{t(g.label)}</Text> : null}
               </View>
-            )) : <Text style={styles.empty}>No glucose readings in the last 14 days.</Text>}
+            )) : <Text style={styles.empty}>{t("No glucose readings in the last 14 days.")}</Text>}
           </View>
 
           <View style={styles.card}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "center", marginBottom: spacing.sm }}>
               <HeartPulse size={14} color={colors.brand} />
-              <Text style={styles.cardTitle}>Blood pressure ({bp.length})</Text>
+              <Text style={styles.cardTitle}>{t("Blood Pressure")} ({bp.length})</Text>
             </View>
             {bp.length ? bp.map((b: any, i: number) => (
               <View key={b.id || i} style={styles.row} testID={`cgv-bp-${i}`}>
                 <Text style={styles.val}>{b.systolic}/{b.diastolic}</Text>
-                <Text style={styles.meta}>{fmt(b.timestamp)}{b.pulse ? ` · pulse ${b.pulse}` : ""}</Text>
-                {b.label ? <Text style={[styles.tag, tagStyle(isBpAlert(b))]}>{b.label}</Text> : null}
+                <Text style={styles.meta}>{fmt(b.timestamp)}{b.pulse ? ` · ${t("pulse")} ${b.pulse}` : ""}</Text>
+                {b.label ? <Text style={[styles.tag, tagStyle(isBpAlert(b))]}>{t(b.label)}</Text> : null}
               </View>
-            )) : <Text style={styles.empty}>No BP readings in the last 14 days.</Text>}
+            )) : <Text style={styles.empty}>{t("No BP readings in the last 14 days.")}</Text>}
           </View>
 
-          <Text style={styles.readOnly}>{`You can view but not change ${displayName}'s readings.`}</Text>
+          <Text style={styles.readOnly}>{t("You can view but not change their readings.")}</Text>
         </ScrollView>
       )}
     </View>

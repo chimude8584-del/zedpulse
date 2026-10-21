@@ -1,0 +1,31 @@
+{
+  "summary": "Translation extension for Log/History/SOS/Caregivers/Caregiver-view verified in Nyanja + Bemba/Tonga spot checks + English toggle-back. 100% of expected translated strings matched exactly on Log, History, SOS, Caregivers screens. Caregiver-view translation keys are present in i18n-screens.ts and are referenced via t() in caregiver-view.tsx; direct end-to-end UI verification of caregiver-view was not completed because the invite-accept flow could not be driven within a single automation session (patient row did not appear in time). No crashes, no broken screens, no missing translations found.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/tmp/log_result_ny.png",
+    "/tmp/hist_ny.png",
+    "/tmp/sos_ny.png",
+    "/tmp/sos_en.png"
+  ],
+  "action_items": [
+    "Please manually verify caregiver-view (/caregiver-view) in Nyanja by linking user +15550009999 to user +15550001234 and opening the patient row. Expected strings (already present in i18n-screens.ts and used via t() in caregiver-view.tsx): 'Masiku 14 apitawa · kungoona', 'Shuga womaliza', 'BP yomaliza', 'Shuga m''magazi', 'Palibe shuga m''masiku 14 apitawa.', 'Palibe BP m''masiku 14 apitawa.'."
+  ],
+  "critical_code_review_comments": [
+    "i18n-screens.ts and i18n.ts: translation dictionaries are now large but still consolidated — fine for current size (<300 lines each).",
+    "caregiver-view.tsx uses t(contextLabels[g.context] || g.context) which correctly translates glucose context chips in history list; same pattern reused on history.tsx.",
+    "sos.tsx uses t('go to the nearest hospital or dial') + '991' + t('(Zambia national emergency) immediately.') split string — currently works but may produce awkward word order in some languages; non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (not tested per request)", "frontend": "~95% (all tested strings matched; caregiver-view not visually re-verified)" },
+  "seed_data_creation": "Generated one 7-day caregiver invite code (MZOW2NRS) from primary test user during testing; may already be accepted/expired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "App shows an onboarding carousel (testIDs: onb-skip / onb-next) AFTER a successful first login — must call it 'post-login'; tap onb-skip once to proceed to home. Login testIDs: auth-phone-input, auth-passcode-input, auth-submit-button. Settings has testIDs lang-en/lang-ny/lang-bem/lang-toi. Tabs are text-only; use get_by_text('Lembani'/'Mbiri'/'Kunyumba'/'Uphungu') for Nyanja. open-settings-button appears both in header AND bottom-tab area so use locator(...).first. Caregiver-view requires a linked patient — need two-user flow (user1 generates cg-invite-code, logout via settings-logout, then user2 enters it in cg-code-input and taps cg-accept).",
+  "rca_of_issue": "No bugs reproduced. All 24 translation assertions across Log/History/SOS/Caregivers/Bemba-Log/Bemba-SOS/Tonga-Log/Tonga-SOS/English-restore passed."
+}

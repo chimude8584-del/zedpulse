@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 
 import { storage } from "@/src/utils/storage";
+import { nyScreens, bemScreens, toiScreens } from "@/src/i18n-screens";
 
 export type Lang = "en" | "ny" | "bem" | "toi";
 
@@ -181,7 +182,12 @@ const toi: Dict = {
   Normal: "Kabotu",
 };
 
-const DICTS: Record<Lang, Dict> = { en: {}, ny, bem, toi };
+const DICTS: Record<Lang, Dict> = {
+  en: {},
+  ny: { ...nyScreens, ...ny },
+  bem: { ...bemScreens, ...bem },
+  toi: { ...toiScreens, ...toi },
+};
 
 (async () => {
   try {

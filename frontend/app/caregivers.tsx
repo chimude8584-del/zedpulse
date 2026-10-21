@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Users, UserPlus, Copy, Share2, Trash2, Eye, User, Clock } from "lucide-react-native";
 
 import { api } from "@/src/api";
+import { useT } from "@/src/i18n";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 
 const useStyles = makeStyles((c) => ({
@@ -60,6 +61,7 @@ export default function Caregivers() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
+  const { t } = useT();
   const [tab, setTab] = useState<Tab>("mine");
   const [code, setCode] = useState("");
 
@@ -71,18 +73,18 @@ export default function Caregivers() {
   const inviteMut = useMutation({
     mutationFn: () => api.caregiverInvite(),
     onSuccess: (d) => setInvite(d),
-    onError: (e: any) => Alert.alert("Error", e?.message || "Could not create invite"),
+    onError: (e: any) => Alert.alert(t("Error"), e?.message || "Could not create invite"),
   });
 
   const acceptMut = useMutation({
     mutationFn: (c: string) => api.caregiverAccept(c),
     onSuccess: (d: any) => {
-      Alert.alert("Linked ✓", d?.patient_name ? `You now watch ${d.patient_name}'s health.` : "Linked successfully.");
+      Alert.alert(t("Linked ✓"), d?.patient_name ? `${t("Linked successfully.")} ${d.patient_name}` : t("Linked successfully."));
       setCode("");
       qc.invalidateQueries({ queryKey: ["my-patients"] });
       setTab("patients");
     },
-    onError: (e: any) => Alert.alert("Could not link", e?.message || "Check the code and try again."),
+    onError: (e: any) => Alert.alert(t("Could not link"), e?.message || t("Check the code and try again.")),
   });
 
   const unlinkMut = useMutation({
@@ -91,14 +93,14 @@ export default function Caregivers() {
       qc.invalidateQueries({ queryKey: ["my-caregivers"] });
       qc.invalidateQueries({ queryKey: ["my-patients"] });
     },
-    onError: (e: any) => Alert.alert("Error", e?.message || "Could not unlink"),
+    onError: (e: any) => Alert.alert(t("Error"), e?.message || "Could not unlink"),
   });
 
   async function copyCode() {
     if (!invite?.code) return;
     try {
       await Clipboard.setStringAsync(invite.code);
-      Alert.alert("Copied", `Code ${invite.code} copied.`);
+      Alert.alert(t("Copied"), `Code ${invite.code} copied.`);
     } catch {}
   }
 
@@ -110,11 +112,11 @@ export default function Caregivers() {
 
   function confirmUnlink(l: any, label: string) {
     Alert.alert(
-      "Remove link?",
-      `${label} will no longer see or share health data.`,
+      t("Remove link?"),
+      `${label} ${t("will no longer see or share health data.")}`,
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Remove", style: "destructive", onPress: () => unlinkMut.mutate(l.id) },
+        { text: t("Cancel"), style: "cancel" },
+        { text: t("Remove"), style: "destructive", onPress: () => unlinkMut.mutate(l.id) },
       ],
     );
   }
@@ -130,15 +132,15 @@ export default function Caregivers() {
         <TouchableOpacity testID="cg-back" style={styles.back} onPress={() => router.back()}>
           <ArrowLeft size={20} color={colors.onSurface} />
         </TouchableOpacity>
-        <Text style={styles.title}>Family & caregivers</Text>
+        <Text style={styles.title}>{t("Family & caregivers")}</Text>
       </View>
 
       <View style={styles.tabRow}>
         <TouchableOpacity testID="cg-tab-mine" style={[styles.tab, tab === "mine" && styles.tabActive]} onPress={() => setTab("mine")}>
-          <Text style={[styles.tabTxt, tab === "mine" && styles.tabTxtActive]}>Watching me</Text>
+          <Text style={[styles.tabTxt, tab === "mine" && styles.tabTxtActive]}>{t("Watching me")}</Text>
         </TouchableOpacity>
         <TouchableOpacity testID="cg-tab-patients" style={[styles.tab, tab === "patients" && styles.tabActive]} onPress={() => setTab("patients")}>
-          <Text style={[styles.tabTxt, tab === "patients" && styles.tabTxtActive]}>People I watch</Text>
+          <Text style={[styles.tabTxt, tab === "patients" && styles.tabTxtActive]}>{t("People I watch")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -146,27 +148,27 @@ export default function Caregivers() {
         {tab === "mine" ? (
           <>
             <Text style={styles.intro}>
-              Share a 7-day invite code so a spouse, parent, or adult child can view your glucose and BP readings. They'll need the ZedPulse app installed.
+              {t("Share a 7-day invite code so a spouse, parent, or adult child can view your glucose and BP readings. They'll need the ZedPulse app installed.")}
             </Text>
 
             {invite ? (
               <View style={styles.inviteCard}>
-                <Text style={styles.inviteHeading}>Your invite code</Text>
+                <Text style={styles.inviteHeading}>{t("Your invite code")}</Text>
                 <View style={styles.codeBox}>
                   <Text style={styles.codeTxt} testID="cg-invite-code">{invite.code}</Text>
                   <TouchableOpacity testID="cg-copy" onPress={copyCode}><Copy size={18} color={colors.brand} /></TouchableOpacity>
                 </View>
-                <Text style={styles.expiry}>Expires {fmtDate(invite.expires_at)}</Text>
+                <Text style={styles.expiry}>{t("Expires")} {fmtDate(invite.expires_at)}</Text>
                 <TouchableOpacity testID="cg-share-wa" style={styles.shareBtn} onPress={shareWA}>
                   <Share2 size={16} color="#FFFFFF" />
-                  <Text style={styles.shareTxt}>Share invite on WhatsApp</Text>
+                  <Text style={styles.shareTxt}>{t("Share invite on WhatsApp")}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity testID="cg-gen" style={styles.genBtn} onPress={() => inviteMut.mutate()} disabled={inviteMut.isPending}>
                 {inviteMut.isPending ? <ActivityIndicator color={colors.brand} /> : <>
                   <UserPlus size={16} color={colors.brand} />
-                  <Text style={styles.genTxt}>Invite a caregiver</Text>
+                  <Text style={styles.genTxt}>{t("Invite a caregiver")}</Text>
                 </>}
               </TouchableOpacity>
             )}
@@ -174,7 +176,7 @@ export default function Caregivers() {
             <View style={styles.listCard}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Users size={14} color={colors.brand} />
-                <Text style={styles.listTitle}>People watching you</Text>
+                <Text style={styles.listTitle}>{t("People watching you")}</Text>
               </View>
               {caregiversQ.isLoading ? <ActivityIndicator color={colors.brand} /> : null}
               {caregiversQ.data?.length ? (
@@ -182,8 +184,8 @@ export default function Caregivers() {
                   <View key={l.id} style={[styles.row, i === 0 && styles.rowFirst]} testID={`cg-row-${i}`}>
                     <User size={18} color={colors.brand} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.name}>{l.caregiver_name || "Caregiver"}</Text>
-                      <Text style={styles.sub}>{l.caregiver_phone || ""} · linked {fmtDate(l.created_at)}</Text>
+                      <Text style={styles.name}>{l.caregiver_name || t("Caregiver")}</Text>
+                      <Text style={styles.sub}>{l.caregiver_phone || ""} · {t("linked")} {fmtDate(l.created_at)}</Text>
                     </View>
                     <TouchableOpacity testID={`cg-unlink-${i}`} style={styles.iconBtn} onPress={() => confirmUnlink(l, l.caregiver_name || "This caregiver")}>
                       <Trash2 size={16} color={colors.error} />
@@ -191,14 +193,14 @@ export default function Caregivers() {
                   </View>
                 ))
               ) : (
-                !caregiversQ.isLoading && <Text style={styles.empty}>No caregivers yet.</Text>
+                !caregiversQ.isLoading && <Text style={styles.empty}>{t("No caregivers yet.")}</Text>
               )}
             </View>
           </>
         ) : (
           <>
             <Text style={styles.intro}>
-              Enter an 8-character invite code from a family member to view their readings in a safe, read-only way.
+              {t("Enter an 8-character invite code from a family member to view their readings in a safe, read-only way.")}
             </Text>
 
             <View style={styles.acceptCard}>
@@ -218,14 +220,14 @@ export default function Caregivers() {
                 onPress={() => acceptMut.mutate(code.trim())}
                 disabled={acceptMut.isPending || !code.trim()}
               >
-                {acceptMut.isPending ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.acceptBtnTxt}>Link account</Text>}
+                {acceptMut.isPending ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.acceptBtnTxt}>{t("Link account")}</Text>}
               </TouchableOpacity>
             </View>
 
             <View style={styles.listCard}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Eye size={14} color={colors.brand} />
-                <Text style={styles.listTitle}>Patients you watch</Text>
+                <Text style={styles.listTitle}>{t("Patients you watch")}</Text>
               </View>
               {patientsQ.isLoading ? <ActivityIndicator color={colors.brand} /> : null}
               {patientsQ.data?.length ? (
@@ -238,8 +240,8 @@ export default function Caregivers() {
                   >
                     <User size={18} color={colors.brand} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.name}>{p.patient_name || "Patient"}</Text>
-                      <Text style={styles.sub}>{p.patient_phone || ""} · linked {fmtDate(p.created_at)}</Text>
+                      <Text style={styles.name}>{p.patient_name || t("Patient")}</Text>
+                      <Text style={styles.sub}>{p.patient_phone || ""} · {t("linked")} {fmtDate(p.created_at)}</Text>
                     </View>
                     <TouchableOpacity testID={`patient-unlink-${i}`} style={styles.iconBtn} onPress={() => confirmUnlink(p, p.patient_name || "This patient")}>
                       <Trash2 size={16} color={colors.error} />
@@ -247,7 +249,7 @@ export default function Caregivers() {
                   </TouchableOpacity>
                 ))
               ) : (
-                !patientsQ.isLoading && <Text style={styles.empty}>No linked patients yet. Ask them for an invite code.</Text>
+                !patientsQ.isLoading && <Text style={styles.empty}>{t("No linked patients yet. Ask them for an invite code.")}</Text>
               )}
             </View>
           </>

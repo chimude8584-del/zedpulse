@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Activity, HeartPulse, Check } from "lucide-react-native";
 
 import { api } from "@/src/api";
+import { useT } from "@/src/i18n";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 import { HypoRescueCard } from "@/src/components/hypo-rescue-card";
 
@@ -68,6 +69,7 @@ export default function LogScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const { t } = useT();
 
   const [mode, setMode] = useState<"glucose" | "bp">("glucose");
 
@@ -93,7 +95,7 @@ export default function LogScreen() {
       qc.invalidateQueries({ queryKey: ["summary"] });
       qc.invalidateQueries({ queryKey: ["glucose-list"] });
     },
-    onError: (e: any) => setError(e.message || "Failed to save"),
+    onError: (e: any) => setError(e.message || t("Failed to save")),
   });
   const bpMut = useMutation({
     mutationFn: () => api.addBP({
@@ -108,7 +110,7 @@ export default function LogScreen() {
       qc.invalidateQueries({ queryKey: ["summary"] });
       qc.invalidateQueries({ queryKey: ["bp-list"] });
     },
-    onError: (e: any) => setError(e.message || "Failed to save"),
+    onError: (e: any) => setError(e.message || t("Failed to save")),
   });
 
   function submit() {
@@ -116,12 +118,12 @@ export default function LogScreen() {
     setResult(null);
     if (mode === "glucose") {
       const v = parseFloat(gValue);
-      if (!v || v <= 0 || v > 40) { setError("Enter a glucose value between 0 and 40 mmol/L"); return; }
+      if (!v || v <= 0 || v > 40) { setError(t("Enter a glucose value between 0 and 40 mmol/L")); return; }
       glucoseMut.mutate();
     } else {
       const s = parseInt(sys, 10);
       const d = parseInt(dia, 10);
-      if (!s || !d) { setError("Enter systolic and diastolic"); return; }
+      if (!s || !d) { setError(t("Enter systolic and diastolic")); return; }
       bpMut.mutate();
     }
   }
@@ -135,8 +137,8 @@ export default function LogScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>New reading</Text>
-          <Text style={styles.subtitle}>Keep a log — share it with your clinician anytime.</Text>
+          <Text style={styles.title}>{t("New reading")}</Text>
+          <Text style={styles.subtitle}>{t("Keep a log — share it with your clinician anytime.")}</Text>
         </View>
 
         <View style={styles.segmentRow}>
@@ -146,7 +148,7 @@ export default function LogScreen() {
             onPress={() => { setMode("glucose"); setResult(null); setError(null); }}
           >
             <Activity size={16} color={mode === "glucose" ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
-            <Text style={[styles.segmentText, mode === "glucose" && styles.segmentTextActive]}>Glucose</Text>
+            <Text style={[styles.segmentText, mode === "glucose" && styles.segmentTextActive]}>{t("Glucose")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             testID="segment-bp"
@@ -154,14 +156,14 @@ export default function LogScreen() {
             onPress={() => { setMode("bp"); setResult(null); setError(null); }}
           >
             <HeartPulse size={16} color={mode === "bp" ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
-            <Text style={[styles.segmentText, mode === "bp" && styles.segmentTextActive]}>Blood Pressure</Text>
+            <Text style={[styles.segmentText, mode === "bp" && styles.segmentTextActive]}>{t("Blood Pressure")}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.content}>
           {mode === "glucose" ? (
             <>
-              <Text style={styles.label}>Value (mmol/L)</Text>
+              <Text style={styles.label}>{t("Value (mmol/L)")}</Text>
               <TextInput
                 testID="glucose-value-input"
                 style={styles.input}
@@ -171,9 +173,9 @@ export default function LogScreen() {
                 placeholder="e.g. 5.6"
                 placeholderTextColor={colors.muted}
               />
-              <Text style={styles.helper}>In range: 4.0–7.0 fasting • 5.0–10.0 after meal</Text>
+              <Text style={styles.helper}>{t("In range: 4.0–7.0 fasting • 5.0–10.0 after meal")}</Text>
 
-              <Text style={styles.label}>Context</Text>
+              <Text style={styles.label}>{t("Context")}</Text>
               <View style={styles.chipsRow}>
                 {CONTEXTS.map((ctx) => {
                   const active = gContext === ctx.key;
@@ -184,19 +186,19 @@ export default function LogScreen() {
                       style={[styles.chip, active && styles.chipActive]}
                       onPress={() => setGContext(ctx.key)}
                     >
-                      <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{ctx.label}</Text>
+                      <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{t(ctx.label)}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              <Text style={styles.label}>Note (optional)</Text>
+              <Text style={styles.label}>{t("Note (optional)")}</Text>
               <TextInput
                 testID="glucose-note-input"
                 style={styles.input}
                 value={gNote}
                 onChangeText={setGNote}
-                placeholder="e.g. after breakfast"
+                placeholder={t("e.g. after breakfast")}
                 placeholderTextColor={colors.muted}
               />
             </>
@@ -204,7 +206,7 @@ export default function LogScreen() {
             <>
               <View style={styles.inputRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Systolic</Text>
+                  <Text style={styles.label}>{t("Systolic")}</Text>
                   <TextInput
                     testID="bp-systolic-input"
                     style={styles.input}
@@ -216,7 +218,7 @@ export default function LogScreen() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Diastolic</Text>
+                  <Text style={styles.label}>{t("Diastolic")}</Text>
                   <TextInput
                     testID="bp-diastolic-input"
                     style={styles.input}
@@ -228,9 +230,9 @@ export default function LogScreen() {
                   />
                 </View>
               </View>
-              <Text style={styles.helper}>mmHg · normal under 120/80</Text>
+              <Text style={styles.helper}>{t("mmHg · normal under 120/80")}</Text>
 
-              <Text style={styles.label}>Pulse (optional)</Text>
+              <Text style={styles.label}>{t("Pulse (optional)")}</Text>
               <TextInput
                 testID="bp-pulse-input"
                 style={styles.input}
@@ -241,13 +243,13 @@ export default function LogScreen() {
                 placeholderTextColor={colors.muted}
               />
 
-              <Text style={styles.label}>Note (optional)</Text>
+              <Text style={styles.label}>{t("Note (optional)")}</Text>
               <TextInput
                 testID="bp-note-input"
                 style={styles.input}
                 value={bpNote}
                 onChangeText={setBpNote}
-                placeholder="e.g. after walk"
+                placeholder={t("e.g. after walk")}
                 placeholderTextColor={colors.muted}
               />
             </>
@@ -262,7 +264,7 @@ export default function LogScreen() {
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Check size={18} color={colors.brand} />
-                <Text style={styles.resultTitle}>{result.label}</Text>
+                <Text style={styles.resultTitle}>{t(result.label)}</Text>
               </View>
               <Text style={styles.resultMsg}>{result.message}</Text>
             </View>
@@ -287,7 +289,7 @@ export default function LogScreen() {
             {loading ? (
               <ActivityIndicator color={colors.onBrandPrimary} />
             ) : (
-              <Text style={styles.submitTxt}>Save reading</Text>
+              <Text style={styles.submitTxt}>{t("Save reading")}</Text>
             )}
           </TouchableOpacity>
         </View>

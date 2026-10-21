@@ -6,6 +6,7 @@ import { useLocalSearchParams } from "expo-router";
 import { Trash2, Activity, HeartPulse } from "lucide-react-native";
 
 import { api } from "@/src/api";
+import { useT } from "@/src/i18n";
 import { makeStyles, useTheme, spacing, radius } from "@/src/theme";
 import { fmtDate, severityColor, contextLabels } from "@/src/utils/format";
 import { MiniLineChart } from "@/src/components/mini-line-chart";
@@ -50,6 +51,7 @@ export default function History() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const { t } = useT();
   const params = useLocalSearchParams<{ tab?: string }>();
   const [mode, setMode] = useState<"glucose" | "bp">(params.tab === "bp" ? "bp" : "glucose");
 
@@ -83,7 +85,7 @@ export default function History() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>History</Text>
+        <Text style={styles.title}>{t("History")}</Text>
       </View>
 
       <View style={styles.segmentRow}>
@@ -93,7 +95,7 @@ export default function History() {
           onPress={() => setMode("glucose")}
         >
           <Activity size={16} color={mode === "glucose" ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
-          <Text style={[styles.segmentTxt, mode === "glucose" && styles.segmentTxtActive]}>Glucose</Text>
+          <Text style={[styles.segmentTxt, mode === "glucose" && styles.segmentTxtActive]}>{t("Glucose")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           testID="hist-tab-bp"
@@ -101,7 +103,7 @@ export default function History() {
           onPress={() => setMode("bp")}
         >
           <HeartPulse size={16} color={mode === "bp" ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
-          <Text style={[styles.segmentTxt, mode === "bp" && styles.segmentTxtActive]}>Blood Pressure</Text>
+          <Text style={[styles.segmentTxt, mode === "bp" && styles.segmentTxtActive]}>{t("Blood Pressure")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -112,9 +114,9 @@ export default function History() {
         <View style={styles.chartCard}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={styles.chartLabel}>
-              {mode === "glucose" ? "Glucose (mmol/L)" : "Systolic (mmHg)"}
+              {mode === "glucose" ? t("Glucose (mmol/L)") : t("Systolic (mmHg)")}
             </Text>
-            <Text style={styles.rangeLabel}>last {mode === "glucose" ? glucoseChartValues.length : bpSysValues.length}</Text>
+            <Text style={styles.rangeLabel}>{t("last")} {mode === "glucose" ? glucoseChartValues.length : bpSysValues.length}</Text>
           </View>
           {mode === "glucose" ? (
             <MiniLineChart
@@ -132,11 +134,11 @@ export default function History() {
             />
           )}
           <Text style={styles.chartCaption}>
-            {mode === "glucose" ? "Shaded band = typical in-range (4.0–10.0)" : "Shaded band = normal systolic (90–120)"}
+            {mode === "glucose" ? t("Shaded band = typical in-range (4.0–10.0)") : t("Shaded band = normal systolic (90–120)")}
           </Text>
         </View>
 
-        <Text style={styles.listTitle}>Readings</Text>
+        <Text style={styles.listTitle}>{t("Readings")}</Text>
 
         {(mode === "glucose" ? gq.isLoading : bq.isLoading) ? (
           <ActivityIndicator color={colors.brand} />
@@ -144,14 +146,14 @@ export default function History() {
 
         {mode === "glucose" ? (
           glucoseData.length === 0 ? (
-            <View style={styles.empty}><Text style={styles.emptyTxt}>No glucose readings yet.</Text></View>
+            <View style={styles.empty}><Text style={styles.emptyTxt}>{t("No glucose readings yet.")}</Text></View>
           ) : (
             glucoseData.map((g: any) => (
               <View key={g.id} style={styles.row} testID={`glucose-row-${g.id}`}>
                 <View style={[styles.statusDot, { backgroundColor: severityColor(g.severity, colors) }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowValue}>{g.value} <Text style={{ fontSize: 12, color: colors.muted, fontWeight: "500" }}>mmol/L</Text></Text>
-                  <Text style={styles.rowSub}>{contextLabels[g.context] || g.context} · {fmtDate(g.timestamp)} · {g.label}</Text>
+                  <Text style={styles.rowSub}>{t(contextLabels[g.context] || g.context)} · {fmtDate(g.timestamp)} · {t(g.label)}</Text>
                 </View>
                 <TouchableOpacity testID={`delete-glucose-${g.id}`} style={styles.deleteBtn} onPress={() => delG.mutate(g.id)}>
                   <Trash2 size={18} color={colors.muted} />
@@ -161,14 +163,14 @@ export default function History() {
           )
         ) : (
           bpData.length === 0 ? (
-            <View style={styles.empty}><Text style={styles.emptyTxt}>No BP readings yet.</Text></View>
+            <View style={styles.empty}><Text style={styles.emptyTxt}>{t("No BP readings yet.")}</Text></View>
           ) : (
             bpData.map((b: any) => (
               <View key={b.id} style={styles.row} testID={`bp-row-${b.id}`}>
                 <View style={[styles.statusDot, { backgroundColor: severityColor(b.severity, colors) }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowValue}>{b.systolic}/{b.diastolic} <Text style={{ fontSize: 12, color: colors.muted, fontWeight: "500" }}>mmHg</Text></Text>
-                  <Text style={styles.rowSub}>{b.pulse ? `${b.pulse} bpm · ` : ""}{fmtDate(b.timestamp)} · {b.label}</Text>
+                  <Text style={styles.rowSub}>{b.pulse ? `${b.pulse} bpm · ` : ""}{fmtDate(b.timestamp)} · {t(b.label)}</Text>
                 </View>
                 <TouchableOpacity testID={`delete-bp-${b.id}`} style={styles.deleteBtn} onPress={() => delB.mutate(b.id)}>
                   <Trash2 size={18} color={colors.muted} />
