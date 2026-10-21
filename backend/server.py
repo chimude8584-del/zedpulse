@@ -22,7 +22,7 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-secret')
+JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALG = "HS256"
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
@@ -1899,10 +1899,12 @@ async def seed_defaults():
     """Seed admin user and default pharmacies with contact info if DB is empty."""
     try:
         # Seed admin user
-        admin_phone = "+260000000000"
-        admin_passcode = "9999"
-        existing_admin = await db.users.find_one({"phone": admin_phone})
-        if not existing_admin:
+        admin_phone = os.environ.get("ADMIN_PHONE")
+        admin_passcode = os.environ.get("ADMIN_PASSCODE")
+        existing_admin = await db.users.find_one({"phone": admin_phone}) if admin_phone else None
+        if not admin_phone or not admin_passcode:
+            pass
+        elif not existing_admin:
             admin_doc = {
                 "id": str(uuid.uuid4()),
                 "phone": admin_phone,
